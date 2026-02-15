@@ -214,6 +214,34 @@ export async function callAI(mode: string, systemPrompt: string, userInput: any)
   return data.result;
 }
 
+// ========== BATCH HELPERS ==========
+export async function getTitleRunsWithTitles(projectId: string) {
+  const runs = await getTitleRuns(projectId);
+  if (!runs.length) return [];
+  const runIds = runs.map(r => r.id);
+  const { data: allTitles, error } = await supabase.from("titles").select("*").in("title_run_id", runIds);
+  if (error) throw error;
+  return runs.map(run => ({
+    ...run,
+    titles: (allTitles || []).filter(t => t.title_run_id === run.id),
+  }));
+}
+
+export async function deleteTitleRun(runId: string) {
+  // Titles cascade via FK or we delete manually
+  await supabase.from("titles").delete().eq("title_run_id", runId);
+  const { error } = await supabase.from("title_runs").delete().eq("id", runId);
+  if (error) throw error;
+}
+
+export async function deleteAllTitleRuns(projectId: string) {
+  const runs = await getTitleRuns(projectId);
+  for (const r of runs) {
+    await supabase.from("titles").delete().eq("title_run_id", r.id);
+  }
+  await supabase.from("title_runs").delete().eq("project_id", projectId);
+}
+
 // ========== EXPORT UTILS ==========
 export function sanitizeCommas(text: string): string {
   return text.replace(/,/g, " -");
