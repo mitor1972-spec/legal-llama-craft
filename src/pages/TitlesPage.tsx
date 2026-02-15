@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, ShieldCheck, Trash2, Search } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Loader2, RefreshCw, ShieldCheck, Trash2, Search, Zap } from "lucide-react";
 import { toast } from "sonner";
 import TitleBatchCard from "@/components/TitleBatchCard";
 
@@ -22,6 +23,20 @@ const BLOCKS = [
   { value: "CUSTOM", label: "CUSTOM" },
 ];
 
+const MIX_BLOCKS = ["B1", "B2", "B3", "B4"];
+const DEFAULT_MIX_PCTS = { B1: 40, B2: 20, B3: 25, B4: 15 };
+
+function distributeCounts(total: number, pcts: Record<string, number>): Record<string, number> {
+  const entries = Object.entries(pcts);
+  const raw = entries.map(([k, p]) => ({ k, n: Math.floor((total * p) / 100) }));
+  let sum = raw.reduce((s, r) => s + r.n, 0);
+  let i = 0;
+  while (sum < total) { raw[i % raw.length].n++; sum++; i++; }
+  const result: Record<string, number> = {};
+  raw.forEach(r => { result[r.k] = r.n; });
+  return result;
+}
+
 export default function TitlesPage() {
   const { currentProjectId, currentProjectTopic } = useAppStore();
   const [clusters, setClusters] = useState<any[]>([]);
@@ -32,6 +47,10 @@ export default function TitlesPage() {
   const [loading, setLoading] = useState(false);
   const [qaLoading, setQaLoading] = useState(false);
   const [replaceMode, setReplaceMode] = useState(false);
+
+  // Mix mode
+  const [genMode, setGenMode] = useState<"SINGLE" | "MIX">("SINGLE");
+  const [mixPcts, setMixPcts] = useState<Record<string, number>>({ ...DEFAULT_MIX_PCTS });
 
   // Filters
   const [filterBlock, setFilterBlock] = useState("ALL");
@@ -62,6 +81,24 @@ export default function TitlesPage() {
     );
   };
 
+  const updateMixPct = (blockKey: string, value: number) => {
+    setMixPcts(prev => {
+      const others = MIX_BLOCKS.filter(b => b !== blockKey);
+      const remaining = 100 - value;
+      const otherSum = others.reduce((s, b) => s + prev[b], 0);
+      const next = { ...prev, [blockKey]: value };
+      if (otherSum > 0) {
+        others.forEach(b => {
+          next[b] = Math.round((prev[b] / otherSum) * remaining);
+        });
+        // fix rounding
+        const newSum = MIX_BLOCKS.reduce((s, b) => s + next[b], 0);
+        if (newSum !== 100) next[others[0]] += 100 - newSum;
+      }
+      return next;
+    });
+  };
+
   const filteredBatches = useMemo(() => {
     return batches.filter(b => {
       if (filterBlock !== "ALL" && b.block_name !== filterBlock) return false;
@@ -80,6 +117,20 @@ export default function TitlesPage() {
 
   const totalTitles = useMemo(() => batches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [batches]);
   const filteredTitles = useMemo(() => filteredBatches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [filteredBatches]);
+
+  const generateForBlock = async (blockName: string, n: number, prompt: string, selectedClusterNames: string[], seedPack: string[], avoidList: string[]) => {
+    const result = await callAI("TITLES", prompt, {
+      topic: currentProjectTopic,
+      count: n,
+      block_name: blockName,
+      include_cluster_ids: selectedClusters,
+      cluster_names: selectedClusterNames,
+      seed_pack: seedPack,
+      constraints: { exclude_topics: [], year_hint: 2026 },
+      avoid_list: avoidList,
+    });
+    return result;
+  };
 
   const handleGenerate = async () => {
     if (!currentProjectId) return toast.error("Selecciona un proyecto");
@@ -104,25 +155,42 @@ export default function TitlesPage() {
         ? batches.flatMap(b => b.titles || []).slice(-50).map((t: any) => t.text)
         : [];
 
-      const result = await callAI("TITLES", prompt, {
-        topic: currentProjectTopic,
-        count: n,
-        block_name: block,
-        include_cluster_ids: selectedClusters,
-        cluster_names: selectedClusterNames,
-        seed_pack: seedPack,
-        constraints: { exclude_topics: [], year_hint: 2026 },
-        avoid_list: avoidList,
-      });
-
-      if (result?.titles?.length) {
-        const run = await createTitleRun(currentProjectId, block, n, selectedClusters);
-        await saveTitles(run.id, result.titles);
-        toast.success(`${result.titles.length} títulos generados`);
-        await loadData();
+      if (genMode === "SINGLE") {
+        const result = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList);
+        if (result?.titles?.length) {
+          const run = await createTitleRun(currentProjectId, block, result.titles.length, selectedClusters);
+          await saveTitles(run.id, result.titles);
+          toast.success(`${result.titles.length} títulos generados (${block})`);
+        } else {
+          toast.error("Respuesta inesperada de la IA");
+        }
       } else {
-        toast.error("Respuesta inesperada de la IA");
+        // MIX mode: generate for each block
+        const dist = distributeCounts(n, mixPcts);
+        let totalGenerated = 0;
+
+        for (const bk of MIX_BLOCKS) {
+          const bkCount = dist[bk];
+          if (bkCount <= 0) continue;
+          toast.info(`Generando ${bkCount} títulos para ${bk}...`);
+          const result = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList);
+          if (result?.titles?.length) {
+            const run = await createTitleRun(currentProjectId, bk, result.titles.length, selectedClusters);
+            await saveTitles(run.id, result.titles);
+            totalGenerated += result.titles.length;
+            // Add generated titles to avoid list for next block
+            result.titles.forEach((t: string) => avoidList.push(t));
+          }
+        }
+
+        if (totalGenerated > 0) {
+          toast.success(`Mix completo: ${totalGenerated} títulos generados en 4 bloques`);
+        } else {
+          toast.error("No se generaron títulos");
+        }
       }
+
+      await loadData();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -170,6 +238,9 @@ export default function TitlesPage() {
     );
   }
 
+  const totalN = parseInt(count) || 200;
+  const dist = distributeCounts(totalN, mixPcts);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -195,20 +266,24 @@ export default function TitlesPage() {
       {/* Generation config */}
       <Card>
         <CardContent className="py-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+          {/* Mode selector */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Bloque</label>
-              <Select value={block} onValueChange={setBlock}>
+              <label className="text-xs text-muted-foreground mb-1 block">Modo generación</label>
+              <Select value={genMode} onValueChange={(v) => setGenMode(v as "SINGLE" | "MIX")}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {BLOCKS.map((b) => (
-                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
-                  ))}
+                  <SelectItem value="SINGLE">Solo bloque</SelectItem>
+                  <SelectItem value="MIX">
+                    <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> Mix completo (B1+B2+B3+B4)</span>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Cantidad</label>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                {genMode === "MIX" ? "Total títulos" : "Cantidad"}
+              </label>
               <Input
                 type="number"
                 min={10}
@@ -220,13 +295,71 @@ export default function TitlesPage() {
               />
               <span className="text-[10px] text-muted-foreground">Sugeridos: 100, 200, 300</span>
             </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={replaceMode} onCheckedChange={(v) => setReplaceMode(!!v)} />
-                <span>Reemplazar resultados actuales</span>
-              </label>
-            </div>
           </div>
+
+          {/* Single block selector or Mix distribution */}
+          {genMode === "SINGLE" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Bloque</label>
+                <Select value={block} onValueChange={setBlock}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BLOCKS.map((b) => (
+                      <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={replaceMode} onCheckedChange={(v) => setReplaceMode(!!v)} />
+                  <span>Reemplazar resultados actuales</span>
+                </label>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-muted-foreground">Reparto por bloque</label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs h-6"
+                  onClick={() => setMixPcts({ ...DEFAULT_MIX_PCTS })}
+                >
+                  Reset
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {MIX_BLOCKS.map(bk => (
+                  <div key={bk} className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="secondary" className="text-[10px] font-mono">{bk}</Badge>
+                      <span className="text-xs font-medium">{mixPcts[bk]}% → {dist[bk]}</span>
+                    </div>
+                    <Slider
+                      min={0}
+                      max={80}
+                      step={5}
+                      value={[mixPcts[bk]]}
+                      onValueChange={([v]) => updateMixPct(bk, v)}
+                      className="w-full"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={replaceMode} onCheckedChange={(v) => setReplaceMode(!!v)} />
+                  <span>Reemplazar resultados actuales</span>
+                </label>
+                <span className="text-xs text-muted-foreground">
+                  Total: {MIX_BLOCKS.reduce((s, b) => s + dist[b], 0)} títulos
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Cluster selection */}
           <div className="flex items-center justify-between mb-2">
@@ -255,8 +388,15 @@ export default function TitlesPage() {
 
           <div className="flex gap-2">
             <Button onClick={handleGenerate} disabled={loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-              {replaceMode ? "Generar (reemplazar)" : "Generar Títulos"}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : genMode === "MIX" ? <Zap className="w-4 h-4 mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+              {loading
+                ? "Generando..."
+                : genMode === "MIX"
+                  ? `Mix completo (${totalN} títulos)`
+                  : replaceMode
+                    ? "Generar (reemplazar)"
+                    : "Generar Títulos"
+              }
             </Button>
           </div>
         </CardContent>
