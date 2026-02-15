@@ -180,7 +180,22 @@ export default function TitlesPage() {
           </div>
 
           {/* Cluster selection */}
-          <label className="text-xs text-muted-foreground mb-2 block">Clusters a incluir</label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs text-muted-foreground">Clusters a incluir</label>
+            <label className="flex items-center gap-2 text-xs cursor-pointer">
+              <Checkbox
+                checked={clusters.length > 0 && selectedClusters.length === clusters.length}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setSelectedClusters(clusters.map((c: any) => c.id));
+                  } else {
+                    setSelectedClusters([]);
+                  }
+                }}
+              />
+              <span>Seleccionar todos</span>
+            </label>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
             {clusters.map((c) => (
               <label key={c.id} className="flex items-center gap-2 text-sm cursor-pointer p-2 rounded-md hover:bg-muted">
