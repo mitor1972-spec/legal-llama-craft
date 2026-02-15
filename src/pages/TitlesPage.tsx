@@ -1,18 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import {
-  getClusters, getAllProjectTitles, createTitleRun, saveTitles,
-  updateTitle, callAI, getActivePrompt, getSeeds, saveQAResult
+  getClusters, getTitleRunsWithTitles, createTitleRun, saveTitles,
+  callAI, getActivePrompt, getSeeds, saveQAResult, deleteTitleRun, deleteAllTitleRuns
 } from "@/lib/api";
-import { sanitizeCommas } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, RefreshCw, ShieldCheck, AlertTriangle } from "lucide-react";
+import { Loader2, RefreshCw, ShieldCheck, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
+import TitleBatchCard from "@/components/TitleBatchCard";
 
 const BLOCKS = [
   { value: "B1", label: "B1 Comercial" },
@@ -28,15 +28,33 @@ export default function TitlesPage() {
   const [selectedClusters, setSelectedClusters] = useState<string[]>([]);
   const [block, setBlock] = useState("B1");
   const [count, setCount] = useState("200");
-  const [titles, setTitles] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [qaLoading, setQaLoading] = useState(false);
+  const [replaceMode, setReplaceMode] = useState(false);
 
-  useEffect(() => {
+  // Filters
+  const [filterBlock, setFilterBlock] = useState("ALL");
+  const [filterCluster, setFilterCluster] = useState("ALL");
+  const [filterKeyword, setFilterKeyword] = useState("");
+
+  const clusterNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    clusters.forEach(c => { map[c.id] = c.name; });
+    return map;
+  }, [clusters]);
+
+  const loadData = async () => {
     if (!currentProjectId) return;
-    getClusters(currentProjectId).then(setClusters);
-    getAllProjectTitles(currentProjectId).then(setTitles);
-  }, [currentProjectId]);
+    const [cls, runs] = await Promise.all([
+      getClusters(currentProjectId),
+      getTitleRunsWithTitles(currentProjectId),
+    ]);
+    setClusters(cls);
+    setBatches(runs);
+  };
+
+  useEffect(() => { loadData(); }, [currentProjectId]);
 
   const toggleCluster = (id: string) => {
     setSelectedClusters((prev) =>
@@ -44,23 +62,47 @@ export default function TitlesPage() {
     );
   };
 
-  const handleGenerate = async (isMore = false) => {
+  const filteredBatches = useMemo(() => {
+    return batches.filter(b => {
+      if (filterBlock !== "ALL" && b.block_name !== filterBlock) return false;
+      if (filterCluster !== "ALL") {
+        const ids = (b.cluster_ids_json || []) as string[];
+        if (!ids.includes(filterCluster)) return false;
+      }
+      if (filterKeyword.trim()) {
+        const kw = filterKeyword.toLowerCase();
+        const hasMatch = (b.titles || []).some((t: any) => t.text.toLowerCase().includes(kw));
+        if (!hasMatch) return false;
+      }
+      return true;
+    });
+  }, [batches, filterBlock, filterCluster, filterKeyword]);
+
+  const totalTitles = useMemo(() => batches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [batches]);
+  const filteredTitles = useMemo(() => filteredBatches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [filteredBatches]);
+
+  const handleGenerate = async () => {
     if (!currentProjectId) return toast.error("Selecciona un proyecto");
     if (selectedClusters.length === 0) return toast.error("Selecciona al menos un cluster");
     setLoading(true);
     try {
+      if (replaceMode) {
+        await deleteAllTitleRuns(currentProjectId);
+      }
+
       const prompt = await getActivePrompt("GPT2");
       const n = parseInt(count);
       const selectedClusterNames = clusters.filter(c => selectedClusters.includes(c.id)).map(c => c.name);
 
-      // Get seeds for selected clusters
       const seedPack: string[] = [];
       for (const cId of selectedClusters) {
         const seeds = await getSeeds(cId);
         seeds.forEach((s: any) => seedPack.push(s.text));
       }
 
-      const avoidList = isMore ? titles.slice(-50).map(t => t.text) : [];
+      const avoidList = !replaceMode && batches.length > 0
+        ? batches.flatMap(b => b.titles || []).slice(-50).map((t: any) => t.text)
+        : [];
 
       const result = await callAI("TITLES", prompt, {
         topic: currentProjectTopic,
@@ -77,8 +119,7 @@ export default function TitlesPage() {
         const run = await createTitleRun(currentProjectId, block, n, selectedClusters);
         await saveTitles(run.id, result.titles);
         toast.success(`${result.titles.length} títulos generados`);
-        const allTitles = await getAllProjectTitles(currentProjectId);
-        setTitles(allTitles);
+        await loadData();
       } else {
         toast.error("Respuesta inesperada de la IA");
       }
@@ -89,11 +130,25 @@ export default function TitlesPage() {
     }
   };
 
+  const handleDeleteBatch = async (runId: string) => {
+    await deleteTitleRun(runId);
+    toast.success("Batch eliminado");
+    await loadData();
+  };
+
+  const handleClearAll = async () => {
+    if (!currentProjectId) return;
+    await deleteAllTitleRuns(currentProjectId);
+    toast.success("Todos los batches eliminados");
+    await loadData();
+  };
+
   const handleQA = async () => {
     if (!currentProjectId) return;
     setQaLoading(true);
     try {
-      const items = titles.map(t => t.text);
+      const allTitles = batches.flatMap(b => b.titles || []);
+      const items = allTitles.map((t: any) => t.text);
       const prompt = await getActivePrompt("QA");
       const result = await callAI("QA", prompt, { item_type: "titles", items, rules: { no_commas_in_titles: true } });
       if (result?.summary) {
@@ -107,24 +162,6 @@ export default function TitlesPage() {
     }
   };
 
-  const fixCommas = () => {
-    let fixed = 0;
-    titles.forEach((t) => {
-      if (t.text.includes(",")) {
-        const newText = sanitizeCommas(t.text);
-        updateTitle(t.id, { text: newText });
-        t.text = newText;
-        fixed++;
-      }
-    });
-    if (fixed > 0) {
-      setTitles([...titles]);
-      toast.success(`${fixed} títulos corregidos`);
-    } else {
-      toast.info("No hay comas que corregir");
-    }
-  };
-
   if (!currentProjectId) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -135,24 +172,27 @@ export default function TitlesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-display text-2xl font-bold mb-1">Títulos (GPT2)</h2>
-          <p className="text-muted-foreground text-sm">Temática: {currentProjectTopic}</p>
+          <p className="text-muted-foreground text-sm">
+            Temática: {currentProjectTopic} · {totalTitles} títulos en {batches.length} batches
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={fixCommas}>
-            <AlertTriangle className="w-4 h-4 mr-1" />
-            Fix comas
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleQA} disabled={qaLoading || titles.length === 0}>
+          <Button variant="outline" size="sm" onClick={handleQA} disabled={qaLoading || totalTitles === 0}>
             {qaLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ShieldCheck className="w-4 h-4 mr-1" />}
             QA Títulos
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleClearAll} disabled={batches.length === 0} className="text-destructive">
+            <Trash2 className="w-4 h-4 mr-1" />
+            Limpiar todo
           </Button>
         </div>
       </div>
 
-      {/* Config */}
+      {/* Generation config */}
       <Card>
         <CardContent className="py-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -180,6 +220,12 @@ export default function TitlesPage() {
               />
               <span className="text-[10px] text-muted-foreground">Sugeridos: 100, 200, 300</span>
             </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <Checkbox checked={replaceMode} onCheckedChange={(v) => setReplaceMode(!!v)} />
+                <span>Reemplazar resultados actuales</span>
+              </label>
+            </div>
           </div>
 
           {/* Cluster selection */}
@@ -189,11 +235,7 @@ export default function TitlesPage() {
               <Checkbox
                 checked={clusters.length > 0 && selectedClusters.length === clusters.length}
                 onCheckedChange={(checked) => {
-                  if (checked) {
-                    setSelectedClusters(clusters.map((c: any) => c.id));
-                  } else {
-                    setSelectedClusters([]);
-                  }
+                  setSelectedClusters(checked ? clusters.map((c: any) => c.id) : []);
                 }}
               />
               <span>Seleccionar todos</span>
@@ -212,45 +254,80 @@ export default function TitlesPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button onClick={() => handleGenerate(false)} disabled={loading}>
+            <Button onClick={handleGenerate} disabled={loading}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-              Generar Títulos
-            </Button>
-            <Button variant="outline" onClick={() => handleGenerate(true)} disabled={loading || titles.length === 0}>
-              Generar {count} más
+              {replaceMode ? "Generar (reemplazar)" : "Generar Títulos"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Titles list */}
-      {titles.length > 0 && (
-        <div>
-          <h3 className="font-display text-lg font-semibold mb-3">{titles.length} títulos</h3>
-          <div className="space-y-1 max-h-[60vh] overflow-y-auto">
-            {titles.map((t, i) => {
-              const hasComma = t.text.includes(",");
-              return (
-                <div key={t.id} className={`flex items-center gap-2 py-1 px-2 rounded text-sm ${hasComma ? "bg-destructive/10 border border-destructive/30" : "hover:bg-muted"}`}>
-                  <span className="text-xs text-muted-foreground w-8 text-right">{i + 1}</span>
-                  <Input
-                    defaultValue={t.text}
-                    onBlur={(e) => updateTitle(t.id, { text: e.target.value })}
-                    className={`h-7 text-xs flex-1 ${hasComma ? "border-destructive/50" : ""}`}
-                  />
-                  {hasComma && <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`text-xs h-6 px-2 ${t.flagged ? "text-warning" : "text-muted-foreground"}`}
-                    onClick={() => { updateTitle(t.id, { flagged: !t.flagged }); t.flagged = !t.flagged; setTitles([...titles]); }}
-                  >
-                    {t.flagged ? "⚠️" : "flag"}
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
+      {/* Filters */}
+      {batches.length > 0 && (
+        <Card>
+          <CardContent className="py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Search className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground">Filtros</span>
+              {(filterBlock !== "ALL" || filterCluster !== "ALL" || filterKeyword) && (
+                <Badge variant="secondary" className="text-[10px]">{filteredTitles} títulos</Badge>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <Select value={filterBlock} onValueChange={setFilterBlock}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Bloque" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos los bloques</SelectItem>
+                  {BLOCKS.map((b) => (
+                    <SelectItem key={b.value} value={b.value}>{b.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterCluster} onValueChange={setFilterCluster}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Cluster" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos los clusters</SelectItem>
+                  {clusters.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Buscar por palabra clave..."
+                value={filterKeyword}
+                onChange={(e) => setFilterKeyword(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Batch list */}
+      {filteredBatches.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="font-display text-lg font-semibold">
+            {filteredBatches.length} batch{filteredBatches.length !== 1 ? "es" : ""}
+          </h3>
+          {filteredBatches.map((batch) => (
+            <TitleBatchCard
+              key={batch.id}
+              run={batch}
+              clusterNames={clusterNameMap}
+              onDelete={handleDeleteBatch}
+              onTitlesChanged={loadData}
+            />
+          ))}
+        </div>
+      )}
+
+      {batches.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          No hay títulos generados. Configura los parámetros y genera tu primer batch.
         </div>
       )}
     </div>
