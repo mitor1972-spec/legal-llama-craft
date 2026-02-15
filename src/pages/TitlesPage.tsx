@@ -169,13 +169,16 @@ export default function TitlesPage() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Cantidad</label>
-              <Select value={count} onValueChange={setCount}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="200">200</SelectItem>
-                  <SelectItem value="300">300</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                type="number"
+                min={10}
+                max={500}
+                value={count}
+                onChange={(e) => setCount(e.target.value)}
+                placeholder="Ej: 200"
+                className="h-9"
+              />
+              <span className="text-[10px] text-muted-foreground">Sugeridos: 100, 200, 300</span>
             </div>
           </div>
 
