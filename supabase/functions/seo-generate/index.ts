@@ -26,9 +26,8 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5",
+        model: "google/gemini-3-flash-preview",
         messages,
-        temperature: 0.7,
       }),
     });
 
@@ -74,7 +73,7 @@ serve(async (req) => {
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ model: "openai/gpt-5", messages: retryMessages, temperature: 0.3 }),
+        body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: retryMessages }),
       });
 
       if (retryResponse.ok) {
