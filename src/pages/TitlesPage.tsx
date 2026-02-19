@@ -118,18 +118,41 @@ export default function TitlesPage() {
   const totalTitles = useMemo(() => batches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [batches]);
   const filteredTitles = useMemo(() => filteredBatches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [filteredBatches]);
 
-  const generateForBlock = async (blockName: string, n: number, prompt: string, selectedClusterNames: string[], seedPack: string[], avoidList: string[]) => {
-    const result = await callAI("TITLES", prompt, {
-      topic: currentProjectTopic,
-      count: n,
-      block_name: blockName,
-      include_cluster_ids: selectedClusters,
-      cluster_names: selectedClusterNames,
-      seed_pack: seedPack,
-      constraints: { exclude_topics: [], year_hint: 2026 },
-      avoid_list: avoidList,
-    });
-    return result;
+  // Split large counts into chunks of max 100 to avoid token overruns
+  const CHUNK_SIZE = 100;
+
+  const generateForBlock = async (
+    blockName: string,
+    n: number,
+    prompt: string,
+    selectedClusterNames: string[],
+    seedPack: string[],
+    avoidList: string[]
+  ): Promise<string[]> => {
+    const chunks: number[] = [];
+    let remaining = n;
+    while (remaining > 0) {
+      chunks.push(Math.min(remaining, CHUNK_SIZE));
+      remaining -= CHUNK_SIZE;
+    }
+
+    const allTitles: string[] = [];
+    for (const chunkCount of chunks) {
+      const result = await callAI("TITLES", prompt, {
+        topic: currentProjectTopic,
+        count: chunkCount,
+        block_name: blockName,
+        include_cluster_ids: selectedClusters,
+        cluster_names: selectedClusterNames,
+        seed_pack: seedPack,
+        constraints: { exclude_topics: [], year_hint: 2026 },
+        avoid_list: [...avoidList, ...allTitles].slice(-80),
+      });
+      if (result?.titles?.length) {
+        allTitles.push(...result.titles);
+      }
+    }
+    return allTitles;
   };
 
   const handleGenerate = async () => {
@@ -156,16 +179,16 @@ export default function TitlesPage() {
         : [];
 
       if (genMode === "SINGLE") {
-        const result = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList);
-        if (result?.titles?.length) {
-          const run = await createTitleRun(currentProjectId, block, result.titles.length, selectedClusters);
-          await saveTitles(run.id, result.titles);
-          toast.success(`${result.titles.length} títulos generados (${block})`);
+        const titles = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList);
+        if (titles.length) {
+          const run = await createTitleRun(currentProjectId, block, titles.length, selectedClusters);
+          await saveTitles(run.id, titles);
+          toast.success(`${titles.length} títulos generados (${block})`);
         } else {
           toast.error("Respuesta inesperada de la IA");
         }
       } else {
-        // MIX mode: generate for each block
+        // MIX mode: generate for each block sequentially
         const dist = distributeCounts(n, mixPcts);
         let totalGenerated = 0;
 
@@ -173,13 +196,13 @@ export default function TitlesPage() {
           const bkCount = dist[bk];
           if (bkCount <= 0) continue;
           toast.info(`Generando ${bkCount} títulos para ${bk}...`);
-          const result = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList);
-          if (result?.titles?.length) {
-            const run = await createTitleRun(currentProjectId, bk, result.titles.length, selectedClusters);
-            await saveTitles(run.id, result.titles);
-            totalGenerated += result.titles.length;
+          const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList);
+          if (titles.length) {
+            const run = await createTitleRun(currentProjectId, bk, titles.length, selectedClusters);
+            await saveTitles(run.id, titles);
+            totalGenerated += titles.length;
             // Add generated titles to avoid list for next block
-            result.titles.forEach((t: string) => avoidList.push(t));
+            titles.forEach((t: string) => avoidList.push(t));
           }
         }
 
