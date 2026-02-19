@@ -5,9 +5,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ~8 tokens per title (conservative estimate to avoid over/under-generation)
-const TOKENS_PER_TITLE = 10;
-const BASE_TOKENS = 500; // overhead for JSON structure
+// ~30 tokens per title (Spanish titles average 20-25 tokens + JSON overhead)
+const TOKENS_PER_TITLE = 30;
+const BASE_TOKENS = 1500; // overhead for JSON structure + topic + block_name
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -21,8 +21,8 @@ serve(async (req) => {
     // Calculate max_tokens based on requested count to prevent over-generation
     const requestedCount = user_input?.count ?? null;
     const max_tokens = requestedCount
-      ? Math.min(BASE_TOKENS + requestedCount * TOKENS_PER_TITLE, 8192)
-      : 4096;
+      ? Math.min(BASE_TOKENS + requestedCount * TOKENS_PER_TITLE, 32768)
+      : 8192;
 
     const messages = [
       { role: "system", content: system_prompt },
@@ -70,10 +70,52 @@ serve(async (req) => {
 
     // Try to extract JSON from content
     let parsed: any = null;
+
+    const cleanAndRepairJSON = (raw: string): any => {
+      let cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+
+      // Try direct parse first
+      try { return JSON.parse(cleaned); } catch { /* continue to repair */ }
+
+      // Find JSON start
+      const jsonStart = cleaned.search(/[\{\[]/);
+      if (jsonStart > 0) cleaned = cleaned.slice(jsonStart);
+
+      // Remove trailing commas before closing brackets
+      cleaned = cleaned.replace(/,\s*([}\]])/g, "$1");
+
+      // Remove control characters
+      cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, (c) => c === "\n" ? " " : "");
+
+      // Try parse after basic cleanup
+      try { return JSON.parse(cleaned); } catch { /* continue to repair */ }
+
+      // Repair truncated JSON: close open strings, arrays, and objects
+      // If ends mid-string, close the string first
+      const quoteCount = (cleaned.match(/(?<!\\)"/g) || []).length;
+      if (quoteCount % 2 !== 0) cleaned += '"';
+
+      // Count unmatched brackets and close them
+      const opens = { "[": 0, "{": 0 };
+      const closes = { "]": "[", "}": "{" };
+      for (const ch of cleaned) {
+        if (ch === "[") opens["["]++;
+        else if (ch === "{") opens["{"]++;
+        else if (ch === "]" && opens["["] > 0) opens["["]--;
+        else if (ch === "}" && opens["{"] > 0) opens["{"]--;
+      }
+
+      // Remove trailing comma if present before closing
+      cleaned = cleaned.replace(/,\s*$/, "");
+
+      // Close arrays then objects (reverse of typical nesting order)
+      cleaned += "]".repeat(opens["["]) + "}".repeat(opens["{"]);
+
+      return JSON.parse(cleaned);
+    };
+
     try {
-      // Remove markdown code fences if present
-      const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      parsed = JSON.parse(cleaned);
+      parsed = cleanAndRepairJSON(content);
     } catch {
       // Retry once with correction
       console.log("First parse failed, retrying with correction prompt");
@@ -89,8 +131,7 @@ serve(async (req) => {
         const retryData = await retryResponse.json();
         const retryContent = retryData.choices?.[0]?.message?.content || "";
         try {
-          const cleaned2 = retryContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-          parsed = JSON.parse(cleaned2);
+          parsed = cleanAndRepairJSON(retryContent);
         } catch {
           return new Response(JSON.stringify({ error: "AI returned invalid JSON after retry", raw: retryContent }), {
             status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
