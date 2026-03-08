@@ -229,7 +229,7 @@ export async function getTitleRunsWithTitles(projectId: string) {
   // Fetch titles per run to avoid 1000-row global limit
   const runsWithTitles = [];
   for (const run of runs) {
-    const titles = await fetchAllRows("titles", "title_run_id", run.id);
+    const titles = await fetchAllTitles("title_run_id", run.id);
     runsWithTitles.push({ ...run, titles });
   }
   return runsWithTitles;
