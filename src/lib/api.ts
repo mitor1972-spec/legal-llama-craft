@@ -112,10 +112,12 @@ export async function getTitles(titleRunId: string) {
 export async function getAllProjectTitles(projectId: string) {
   const runs = await getTitleRuns(projectId);
   if (!runs.length) return [];
-  const runIds = runs.map(r => r.id);
-  const { data, error } = await supabase.from("titles").select("*").in("title_run_id", runIds);
-  if (error) throw error;
-  return data || [];
+  let all: any[] = [];
+  for (const r of runs) {
+    const titles = await fetchAllRows("titles", "title_run_id", r.id);
+    all = all.concat(titles);
+  }
+  return all;
 }
 
 export async function saveTitles(titleRunId: string, titles: string[]) {
