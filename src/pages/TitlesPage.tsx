@@ -310,13 +310,13 @@ export default function TitlesPage() {
               <Input
                 type="number"
                 min={10}
-                max={500}
+                max={5000}
                 value={count}
                 onChange={(e) => setCount(e.target.value)}
                 placeholder="Ej: 200"
                 className="h-9"
               />
-              <span className="text-[10px] text-muted-foreground">Sugeridos: 100, 200, 300</span>
+              <span className="text-[10px] text-muted-foreground">Sugeridos: 100, 200, 500, 1000, 3000</span>
             </div>
           </div>
 
