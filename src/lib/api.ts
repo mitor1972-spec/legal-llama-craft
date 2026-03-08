@@ -114,7 +114,7 @@ export async function getAllProjectTitles(projectId: string) {
   if (!runs.length) return [];
   let all: any[] = [];
   for (const r of runs) {
-    const titles = await fetchAllRows("titles", "title_run_id", r.id);
+    const titles = await fetchAllTitles("title_run_id", r.id);
     all = all.concat(titles);
   }
   return all;
