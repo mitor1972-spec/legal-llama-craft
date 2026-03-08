@@ -112,10 +112,12 @@ export async function getTitles(titleRunId: string) {
 export async function getAllProjectTitles(projectId: string) {
   const runs = await getTitleRuns(projectId);
   if (!runs.length) return [];
-  const runIds = runs.map(r => r.id);
-  const { data, error } = await supabase.from("titles").select("*").in("title_run_id", runIds);
-  if (error) throw error;
-  return data || [];
+  let all: any[] = [];
+  for (const r of runs) {
+    const titles = await fetchAllTitles("title_run_id", r.id);
+    all = all.concat(titles);
+  }
+  return all;
 }
 
 export async function saveTitles(titleRunId: string, titles: string[]) {
@@ -123,8 +125,13 @@ export async function saveTitles(titleRunId: string, titles: string[]) {
     const cleaned = text.replace(/,/g, " - ");
     return { title_run_id: titleRunId, text: cleaned };
   });
-  const { error } = await supabase.from("titles").insert(rows);
-  if (error) throw error;
+  // Insert in batches of 500 to avoid payload limits
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const chunk = rows.slice(i, i + BATCH);
+    const { error } = await supabase.from("titles").insert(chunk);
+    if (error) throw error;
+  }
 }
 
 export async function updateTitle(id: string, updates: { text?: string; flagged?: boolean; approved?: boolean; note?: string }) {
@@ -218,13 +225,34 @@ export async function callAI(mode: string, systemPrompt: string, userInput: any)
 export async function getTitleRunsWithTitles(projectId: string) {
   const runs = await getTitleRuns(projectId);
   if (!runs.length) return [];
-  const runIds = runs.map(r => r.id);
-  const { data: allTitles, error } = await supabase.from("titles").select("*").in("title_run_id", runIds);
-  if (error) throw error;
-  return runs.map(run => ({
-    ...run,
-    titles: (allTitles || []).filter(t => t.title_run_id === run.id),
-  }));
+  
+  // Fetch titles per run to avoid 1000-row global limit
+  const runsWithTitles = [];
+  for (const run of runs) {
+    const titles = await fetchAllTitles("title_run_id", run.id);
+    runsWithTitles.push({ ...run, titles });
+  }
+  return runsWithTitles;
+}
+
+// Paginated fetch for titles to bypass the 1000-row default limit
+async function fetchAllTitles(filterCol: "title_run_id", filterVal: string) {
+  const PAGE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("titles")
+      .select("*")
+      .eq(filterCol, filterVal)
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return allData;
 }
 
 export async function deleteTitleRun(runId: string) {
