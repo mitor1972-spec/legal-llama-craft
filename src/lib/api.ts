@@ -223,13 +223,34 @@ export async function callAI(mode: string, systemPrompt: string, userInput: any)
 export async function getTitleRunsWithTitles(projectId: string) {
   const runs = await getTitleRuns(projectId);
   if (!runs.length) return [];
-  const runIds = runs.map(r => r.id);
-  const { data: allTitles, error } = await supabase.from("titles").select("*").in("title_run_id", runIds);
-  if (error) throw error;
-  return runs.map(run => ({
-    ...run,
-    titles: (allTitles || []).filter(t => t.title_run_id === run.id),
-  }));
+  
+  // Fetch titles per run to avoid 1000-row global limit
+  const runsWithTitles = [];
+  for (const run of runs) {
+    const titles = await fetchAllRows("titles", "title_run_id", run.id);
+    runsWithTitles.push({ ...run, titles });
+  }
+  return runsWithTitles;
+}
+
+// Paginated fetch to bypass the 1000-row default limit
+async function fetchAllRows(table: string, filterCol: string, filterVal: string) {
+  const PAGE = 1000;
+  let allData: any[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .eq(filterCol, filterVal)
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    allData = allData.concat(data);
+    if (data.length < PAGE) break;
+    from += PAGE;
+  }
+  return allData;
 }
 
 export async function deleteTitleRun(runId: string) {
