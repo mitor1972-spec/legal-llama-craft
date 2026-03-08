@@ -235,14 +235,14 @@ export async function getTitleRunsWithTitles(projectId: string) {
   return runsWithTitles;
 }
 
-// Paginated fetch to bypass the 1000-row default limit
-async function fetchAllRows(table: string, filterCol: string, filterVal: string) {
+// Paginated fetch for titles to bypass the 1000-row default limit
+async function fetchAllTitles(filterCol: "title_run_id", filterVal: string) {
   const PAGE = 1000;
   let allData: any[] = [];
   let from = 0;
   while (true) {
     const { data, error } = await supabase
-      .from(table)
+      .from("titles")
       .select("*")
       .eq(filterCol, filterVal)
       .range(from, from + PAGE - 1);
