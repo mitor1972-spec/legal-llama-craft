@@ -119,7 +119,7 @@ export default function TitlesPage() {
   const filteredTitles = useMemo(() => filteredBatches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [filteredBatches]);
 
   // Split large counts into chunks of max 100 to avoid token overruns
-  const CHUNK_SIZE = 100;
+  const CHUNK_SIZE = 50;
 
   const generateForBlock = async (
     blockName: string,
