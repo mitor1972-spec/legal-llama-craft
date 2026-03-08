@@ -123,8 +123,13 @@ export async function saveTitles(titleRunId: string, titles: string[]) {
     const cleaned = text.replace(/,/g, " - ");
     return { title_run_id: titleRunId, text: cleaned };
   });
-  const { error } = await supabase.from("titles").insert(rows);
-  if (error) throw error;
+  // Insert in batches of 500 to avoid payload limits
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const chunk = rows.slice(i, i + BATCH);
+    const { error } = await supabase.from("titles").insert(chunk);
+    if (error) throw error;
+  }
 }
 
 export async function updateTitle(id: string, updates: { text?: string; flagged?: boolean; approved?: boolean; note?: string }) {
