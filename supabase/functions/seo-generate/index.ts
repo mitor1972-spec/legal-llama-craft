@@ -7,7 +7,7 @@ const corsHeaders = {
 
 const TITLE_TOKENS_PER_ITEM = 45;
 const TITLE_BASE_TOKENS = 2500;
-const DEFAULT_MAX_TOKENS = 8192;
+const DEFAULT_MAX_TOKENS = 12288;
 const MAX_OUTPUT_TOKENS = 16384;
 
 serve(async (req) => {
@@ -31,19 +31,27 @@ serve(async (req) => {
     ];
 
     const callOpenAI = async (msgs: any[]) => {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: msgs,
-          max_tokens,
-        }),
-      });
-      return response;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120_000); // 120s timeout
+      try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: msgs,
+            max_tokens,
+            temperature: 0.7,
+          }),
+          signal: controller.signal,
+        });
+        return response;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     };
 
     const response = await callOpenAI(messages);
