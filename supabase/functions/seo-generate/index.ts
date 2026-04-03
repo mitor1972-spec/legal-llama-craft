@@ -7,7 +7,7 @@ const corsHeaders = {
 
 const TITLE_TOKENS_PER_ITEM = 45;
 const TITLE_BASE_TOKENS = 2500;
-const DEFAULT_MAX_TOKENS = 8192;
+const DEFAULT_MAX_TOKENS = 12288;
 const MAX_OUTPUT_TOKENS = 16384;
 
 serve(async (req) => {
