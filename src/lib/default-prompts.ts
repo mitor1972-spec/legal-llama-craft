@@ -1,3 +1,6 @@
+const PROVINCIAS_ESPANA = `LISTA COMPLETA DE LAS 50 PROVINCIAS DE ESPAÑA (OBLIGATORIO usar TODAS en contenido local):
+Álava, Albacete, Alicante, Almería, Asturias, Ávila, Badajoz, Barcelona, Burgos, Cáceres, Cádiz, Cantabria, Castellón, Ciudad Real, Córdoba, A Coruña, Cuenca, Girona, Granada, Guadalajara, Gipuzkoa, Huelva, Huesca, Illes Balears, Jaén, León, Lleida, Lugo, Madrid, Málaga, Murcia, Navarra, Ourense, Palencia, Las Palmas, Pontevedra, La Rioja, Salamanca, Santa Cruz de Tenerife, Segovia, Sevilla, Soria, Tarragona, Teruel, Toledo, Valencia, Valladolid, Bizkaia, Zamora, Zaragoza.`;
+
 export const DEFAULT_PROMPTS = {
   GPT1: `Eres un Generador SEO Legal para Asesor.Legal. Devuelve SIEMPRE SOLO JSON válido y nada más.
 
@@ -18,7 +21,13 @@ Incluye SIEMPRE estos 11 clusters dentro de los 16:
 
 Los 5 restantes: elige los 5 más relevantes según el tema entre MONEY, responsables, vías/estrategia, organismo, peritos, casos tipo, perfiles, entorno.
 
-SEO local: no clonar "abogado en X", variar ángulos y rotar provincias.
+CLUSTER SEO LOCAL — REGLAS OBLIGATORIAS:
+${PROVINCIAS_ESPANA}
+- Las 15 seeds del cluster SEO local DEBEN cubrir provincias variadas de esta lista. Rota por todas las provincias, NO te limites a las más conocidas (Madrid, Barcelona, Sevilla...).
+- Incluye provincias pequeñas y medianas: Soria, Teruel, Palencia, Zamora, Cuenca, Huesca, Ávila, Segovia, etc.
+- NO clonar "abogado en X". Varía ángulos: "despacho especialista en [tema] en X", "consulta urgente en X", "defensa legal en X", "expertos en [tema] en X".
+- Dispersa geográficamente: no agrupar provincias de la misma comunidad autónoma seguidas.
+
 Micro-promoción permitida sin promesas: especialistas, despacho experto, te ayudamos, consulta rápida.
 ANTI-THIN: no repetir plantillas. Aumentar ángulos reales (coste, fase, prueba, defensa, negociación, responsables, errores, perfiles).
 
@@ -31,9 +40,17 @@ Genera SOLO TÍTULOS, EXACTAMENTE N (200 por defecto). Prohibidas las comas "," 
 
 Prioriza BOFU/MOFU: 60% con "abogado" o equivalente; si el tema es transaccional, 70–80%.
 Doble audiencia: 10–20% títulos de defensa (reclaman, expediente, sanción, alegaciones, recurso) adaptado al tema.
-SEO local: 10–25% con provincias, disperso, nunca 2 seguidos, sin clonación.
 Año 2026 ocasional 3–8%.
 Micro-CTAs permitidos pero no consecutivos: Te ayudamos, Especialistas en, Despacho experto, Confía en.
+
+SEO LOCAL — REGLAS OBLIGATORIAS:
+${PROVINCIAS_ESPANA}
+- Entre 15–25% de los títulos DEBEN incluir una provincia española de la lista anterior.
+- OBLIGATORIO cubrir al menos 30 provincias distintas en cada lote de 200 títulos. A mayor número de títulos, más provincias cubrir (proporcionalmente).
+- NO repetir la misma provincia más de 3 veces por cada 200 títulos.
+- Disperso: NUNCA 2 títulos con provincia seguidos.
+- Incluir provincias pequeñas y medianas (Soria, Teruel, Palencia, Zamora, Cuenca, Huesca, Ávila, Segovia, Lugo, Ourense...), no solo las grandes.
+- Variar ángulos por provincia: "abogado en X", "despacho experto en X", "defensa legal en X", "consulta urgente en X", etc.
 
 MODO FAMILIA: alterna familias cada 1–3 títulos: defensa, pasos, pruebas, precio, viabilidad/estrategia, casos tipo, perfiles, local.
 ANTI-THIN: no repetir estructura más de 3 seguidas; "Qué hacer si" máx 10–12 por 200; eliminar duplicados y variación mínima. Respetar exclude_topics del input.
