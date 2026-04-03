@@ -14,6 +14,17 @@ export async function createProject(topic: string) {
   return data;
 }
 
+/** Generate clusters automatically for a project (fire-and-forget friendly) */
+export async function generateClustersForProject(projectId: string, topic: string) {
+  const prompt = await getActivePrompt("GPT1");
+  const result = await callAI("CLUSTERS", prompt, { topic, notes: "" });
+  if (result?.clusters) {
+    await upsertClusters(projectId, result.clusters);
+    return result.clusters.length;
+  }
+  throw new Error("Respuesta inesperada de la IA");
+}
+
 export async function updateProject(id: string, updates: { topic?: string; notes_general?: string }) {
   const { error } = await supabase.from("projects").update(updates).eq("id", id);
   if (error) throw error;
