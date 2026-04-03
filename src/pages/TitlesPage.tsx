@@ -118,8 +118,15 @@ export default function TitlesPage() {
   const totalTitles = useMemo(() => batches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [batches]);
   const filteredTitles = useMemo(() => filteredBatches.reduce((sum, b) => sum + (b.titles?.length || 0), 0), [filteredBatches]);
 
-  // Split large counts into chunks of max 100 to avoid token overruns
+  // Split large counts into chunks to avoid token overruns
   const CHUNK_SIZE = 50;
+  const MAX_RETRIES_PER_CHUNK = 4;
+  const AVOID_LIST_WINDOW = 120;
+
+  const normalizeTitle = (value: unknown) => {
+    if (typeof value !== "string") return "";
+    return value.replace(/,/g, " - ").replace(/\s+/g, " ").trim();
+  };
 
   const generateForBlock = async (
     blockName: string,
@@ -137,21 +144,53 @@ export default function TitlesPage() {
     }
 
     const allTitles: string[] = [];
-    for (const chunkCount of chunks) {
-      const result = await callAI("TITLES", prompt, {
-        topic: currentProjectTopic,
-        count: chunkCount,
-        block_name: blockName,
-        include_cluster_ids: selectedClusters,
-        cluster_names: selectedClusterNames,
-        seed_pack: seedPack,
-        constraints: { exclude_topics: [], year_hint: 2026 },
-        avoid_list: [...avoidList, ...allTitles].slice(-80),
-      });
-      if (result?.titles?.length) {
-        allTitles.push(...result.titles);
+    const seen = new Set(
+      avoidList
+        .map((title) => normalizeTitle(title).toLowerCase())
+        .filter(Boolean)
+    );
+
+    for (const chunkTarget of chunks) {
+      const chunkTitles: string[] = [];
+      let attempts = 0;
+
+      while (chunkTitles.length < chunkTarget && attempts < MAX_RETRIES_PER_CHUNK) {
+        const missing = chunkTarget - chunkTitles.length;
+        const result = await callAI("TITLES", prompt, {
+          topic: currentProjectTopic,
+          count: missing,
+          block_name: blockName,
+          include_cluster_ids: selectedClusters,
+          cluster_names: selectedClusterNames,
+          seed_pack: seedPack,
+          constraints: { exclude_topics: [], year_hint: 2026 },
+          retry_hint:
+            attempts === 0
+              ? `Devuelve exactamente ${missing} títulos válidos.`
+              : `Faltan ${missing} títulos. Devuelve exactamente ${missing} títulos NUEVOS y distintos.`,
+          avoid_list: [...avoidList, ...allTitles, ...chunkTitles].slice(-AVOID_LIST_WINDOW),
+        });
+
+        const generatedTitles = Array.isArray(result?.titles) ? result.titles : [];
+        for (const rawTitle of generatedTitles) {
+          const normalizedTitle = normalizeTitle(rawTitle);
+          const normalizedKey = normalizedTitle.toLowerCase();
+          if (!normalizedTitle || seen.has(normalizedKey)) continue;
+          seen.add(normalizedKey);
+          chunkTitles.push(normalizedTitle);
+          if (chunkTitles.length === chunkTarget) break;
+        }
+
+        attempts++;
       }
+
+      if (chunkTitles.length < chunkTarget) {
+        throw new Error(`La IA no devolvió los ${chunkTarget} títulos solicitados para ${blockName}.`);
+      }
+
+      allTitles.push(...chunkTitles);
     }
+
     return allTitles;
   };
 
@@ -160,35 +199,29 @@ export default function TitlesPage() {
     if (selectedClusters.length === 0) return toast.error("Selecciona al menos un cluster");
     setLoading(true);
     try {
+      const n = parseInt(count, 10);
+      if (Number.isNaN(n) || n <= 0) throw new Error("Introduce una cantidad válida de títulos");
+
       if (replaceMode) {
         await deleteAllTitleRuns(currentProjectId);
       }
 
       const prompt = await getActivePrompt("GPT2");
-      const n = parseInt(count);
-      const selectedClusterNames = clusters.filter(c => selectedClusters.includes(c.id)).map(c => c.name);
+      const selectedClusterNames = clusters.filter((c) => selectedClusters.includes(c.id)).map((c) => c.name);
 
-      const seedPack: string[] = [];
-      for (const cId of selectedClusters) {
-        const seeds = await getSeeds(cId);
-        seeds.forEach((s: any) => seedPack.push(s.text));
-      }
+      const seedGroups = await Promise.all(selectedClusters.map((cId) => getSeeds(cId)));
+      const seedPack = seedGroups.flatMap((seeds) => (seeds || []).map((s: any) => s.text));
 
       const avoidList = !replaceMode && batches.length > 0
-        ? batches.flatMap(b => b.titles || []).slice(-50).map((t: any) => t.text)
+        ? batches.flatMap((b) => b.titles || []).slice(-50).map((t: any) => t.text)
         : [];
 
       if (genMode === "SINGLE") {
         const titles = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList);
-        if (titles.length) {
-          const run = await createTitleRun(currentProjectId, block, titles.length, selectedClusters);
-          await saveTitles(run.id, titles);
-          toast.success(`${titles.length} títulos generados (${block})`);
-        } else {
-          toast.error("Respuesta inesperada de la IA");
-        }
+        const run = await createTitleRun(currentProjectId, block, n, selectedClusters);
+        await saveTitles(run.id, titles);
+        toast.success(`${n} títulos generados (${block})`);
       } else {
-        // MIX mode: generate for each block sequentially
         const dist = distributeCounts(n, mixPcts);
         let totalGenerated = 0;
 
@@ -197,20 +230,13 @@ export default function TitlesPage() {
           if (bkCount <= 0) continue;
           toast.info(`Generando ${bkCount} títulos para ${bk}...`);
           const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList);
-          if (titles.length) {
-            const run = await createTitleRun(currentProjectId, bk, titles.length, selectedClusters);
-            await saveTitles(run.id, titles);
-            totalGenerated += titles.length;
-            // Add generated titles to avoid list for next block
-            titles.forEach((t: string) => avoidList.push(t));
-          }
+          const run = await createTitleRun(currentProjectId, bk, bkCount, selectedClusters);
+          await saveTitles(run.id, titles);
+          totalGenerated += titles.length;
+          titles.forEach((t: string) => avoidList.push(t));
         }
 
-        if (totalGenerated > 0) {
-          toast.success(`Mix completo: ${totalGenerated} títulos generados en 4 bloques`);
-        } else {
-          toast.error("No se generaron títulos");
-        }
+        toast.success(`Mix completo: ${totalGenerated} títulos generados en 4 bloques`);
       }
 
       await loadData();
