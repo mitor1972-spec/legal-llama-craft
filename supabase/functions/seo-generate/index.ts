@@ -5,8 +5,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const TOKENS_PER_TITLE = 30;
-const BASE_TOKENS = 1500;
+const TITLE_TOKENS_PER_ITEM = 45;
+const TITLE_BASE_TOKENS = 2500;
+const DEFAULT_MAX_TOKENS = 8192;
+const MAX_OUTPUT_TOKENS = 16384;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -17,10 +19,11 @@ serve(async (req) => {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not configured");
 
-    const requestedCount = user_input?.count ?? null;
-    const max_tokens = requestedCount
-      ? Math.min(BASE_TOKENS + requestedCount * TOKENS_PER_TITLE, 16384)
-      : 8192;
+    const requestedCount = Number(user_input?.count ?? 0);
+    const safeRequestedCount = Number.isFinite(requestedCount) ? requestedCount : 0;
+    const max_tokens = mode === "TITLES"
+      ? Math.min(TITLE_BASE_TOKENS + Math.max(safeRequestedCount, 1) * TITLE_TOKENS_PER_ITEM, MAX_OUTPUT_TOKENS)
+      : DEFAULT_MAX_TOKENS;
 
     const messages = [
       { role: "system", content: system_prompt },
