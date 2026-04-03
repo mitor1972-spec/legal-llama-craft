@@ -31,8 +31,12 @@ export default function ProjectPage() {
       const p = await createProject(topic.trim());
       setCurrentProject(p.id, p.topic);
       setTopic("");
-      toast.success("Proyecto creado");
+      toast.success("Proyecto creado. Generando clusters...");
       loadProjects();
+      // Auto-generate clusters in background
+      generateClustersForProject(p.id, p.topic)
+        .then((count) => toast.success(`${count} clusters generados automáticamente`))
+        .catch((err) => toast.error(`Error generando clusters: ${err.message}`));
     } catch (e: any) {
       toast.error(e.message);
     } finally {
