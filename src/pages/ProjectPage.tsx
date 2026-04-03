@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { getProjects, createProject, deleteProject } from "@/lib/api";
+import { getProjects, createProject, deleteProject, generateClustersForProject } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
