@@ -6,6 +6,17 @@ export const DEFAULT_PROMPTS = {
 
 Genera EXACTAMENTE 16 clusters y EXACTAMENTE 15 seeds por cluster. Enfocado a captación (BOFU/MOFU). Prohibido spam y thin content. Prohibido jurisprudencia/artículos salvo petición.
 
+CONTEXTO DEL PROYECTO (usar SIEMPRE para guiar la generación):
+El usuario te enviará en el JSON de entrada los siguientes campos opcionales además de "topic":
+- "description": descripción detallada y subtemas/matices del tema. Úsala para entender el alcance real y evitar generar clusters fuera de foco.
+- "target_audience": audiencia objetivo (particulares, autónomos, empresas, perfil concreto...). Adapta vocabulario, ángulos e intención a esa audiencia.
+- "secondary_keywords": palabras clave secundarias y términos relacionados. Cubre estos términos repartidos entre los clusters y las seeds.
+- "exclude_topics": temas, subtemas o ángulos prohibidos. NUNCA generes clusters ni seeds que toquen estos temas.
+- "tone": tono editorial deseado (cercano, formal, directo, técnico...). Refleja ese tono en los nombres de cluster y seeds.
+- "geographic_focus": enfoque geográfico (ej. "España nacional", "Cataluña", "solo Madrid y Barcelona"). El cluster SEO local DEBE respetar este foco; si está vacío usa toda España.
+- "notes_general" / "notes": instrucciones adicionales del usuario.
+Si un campo viene vacío, ignóralo. Si hay conflicto, "exclude_topics" y "geographic_focus" tienen prioridad sobre cualquier otra regla.
+
 Incluye SIEMPRE estos 11 clusters dentro de los 16:
 1 Abogado / contratar / especialista (BOFU)
 2 Precio / presupuesto / honorarios (BOFU)
@@ -24,6 +35,7 @@ Los 5 restantes: elige los 5 más relevantes según el tema entre MONEY, respons
 CLUSTER SEO LOCAL — REGLAS OBLIGATORIAS:
 ${PROVINCIAS_ESPANA}
 - Las 15 seeds del cluster SEO local DEBEN cubrir provincias variadas de esta lista. Rota por todas las provincias, NO te limites a las más conocidas (Madrid, Barcelona, Sevilla...).
+- Si "geographic_focus" está definido, restringe las provincias a ese foco. Si está vacío, cubre toda España.
 - Incluye provincias pequeñas y medianas: Soria, Teruel, Palencia, Zamora, Cuenca, Huesca, Ávila, Segovia, etc.
 - NO clonar "abogado en X". Varía ángulos: "despacho especialista en [tema] en X", "consulta urgente en X", "defensa legal en X", "expertos en [tema] en X".
 - Dispersa geográficamente: no agrupar provincias de la misma comunidad autónoma seguidas.
@@ -38,6 +50,17 @@ SALIDA JSON EXACTA:
 
 Genera SOLO TÍTULOS, EXACTAMENTE N (200 por defecto). Prohibidas las comas "," en títulos. Si aparece una coma, reescribe el título sin coma (usar " - " si hace falta).
 
+CONTEXTO DEL PROYECTO (usar SIEMPRE para guiar la generación):
+El usuario te enviará en el JSON de entrada los siguientes campos opcionales además de "topic":
+- "description": descripción detallada y subtemas. Asegúrate de cubrir los matices reales del tema.
+- "target_audience": audiencia objetivo. Ajusta vocabulario, dolor y CTAs a esa audiencia.
+- "secondary_keywords": palabras clave secundarias. Distribúyelas entre los títulos generados.
+- "exclude_topics" / "constraints.exclude_topics": temas/ángulos prohibidos. NUNCA generes títulos que los toquen.
+- "tone": tono editorial deseado. Refléjalo en redacción, longitud y CTAs.
+- "geographic_focus": foco geográfico. Si está definido, restringe los títulos locales a esas provincias/regiones; si está vacío, usa toda España.
+- "notes_general" / "avoid_list": evita reutilizar títulos del avoid_list y respeta cualquier directriz del usuario.
+Si un campo viene vacío, ignóralo. "exclude_topics" y "geographic_focus" tienen prioridad sobre el resto de reglas.
+
 Prioriza BOFU/MOFU: 60% con "abogado" o equivalente; si el tema es transaccional, 70–80%.
 Doble audiencia: 10–20% títulos de defensa (reclaman, expediente, sanción, alegaciones, recurso) adaptado al tema.
 Año 2026 ocasional 3–8%.
@@ -46,6 +69,7 @@ Micro-CTAs permitidos pero no consecutivos: Te ayudamos, Especialistas en, Despa
 SEO LOCAL — REGLAS OBLIGATORIAS:
 ${PROVINCIAS_ESPANA}
 - Entre 15–25% de los títulos DEBEN incluir una provincia española de la lista anterior.
+- Si "geographic_focus" está definido, usa SOLO provincias/regiones dentro de ese foco. Si está vacío, cubre toda España.
 - OBLIGATORIO cubrir al menos 30 provincias distintas en cada lote de 200 títulos. A mayor número de títulos, más provincias cubrir (proporcionalmente).
 - NO repetir la misma provincia más de 3 veces por cada 200 títulos.
 - Disperso: NUNCA 2 títulos con provincia seguidos.
