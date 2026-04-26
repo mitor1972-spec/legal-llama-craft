@@ -161,7 +161,7 @@ export default function ProjectPage() {
       <div>
         <h2 className="font-display text-2xl font-bold mb-1">Proyecto</h2>
         <p className="text-muted-foreground text-sm">
-          Cuanto más contexto aportes (descripción, audiencia, keywords secundarias, temas a evitar...), mejores y más relevantes serán los clusters y títulos que genere la IA.
+          Escribe la <strong>temática</strong> y un <strong>resumen del tema</strong>. Después pulsa <em>“Generar contexto con IA”</em> y la IA rellenará por ti audiencia, tono, palabras clave, ángulos a evitar y foco geográfico. Tú solo añades las notas adicionales si quieres.
         </p>
       </div>
 
@@ -179,20 +179,25 @@ export default function ProjectPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="topic">Temática principal *</Label>
-            <div className="flex gap-2">
-              <Input
-                id="topic"
-                placeholder="Ej: Despidos disciplinarios y procedentes"
-                value={form.topic}
-                onChange={(e) => setField("topic", e.target.value)}
-                className="flex-1"
-              />
+            <Input
+              id="topic"
+              placeholder="Ej: Despidos disciplinarios y procedentes"
+              value={form.topic}
+              onChange={(e) => setField("topic", e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Frase corta que define el tema legal central del proyecto.</p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="description">Descripción y subtemas *</Label>
               <Button
                 type="button"
                 variant="secondary"
+                size="sm"
                 onClick={handleAutoContext}
-                disabled={contextLoading || !form.topic.trim()}
-                title="La IA rellenará por ti la descripción, audiencia, tono, keywords, etc."
+                disabled={contextLoading || !form.topic.trim() || !form.description.trim()}
+                title="La IA enriquecerá tu descripción y rellenará audiencia, tono, keywords, exclusiones y foco geográfico."
               >
                 {contextLoading
                   ? <Loader2 className="w-4 h-4 animate-spin mr-1" />
@@ -200,11 +205,6 @@ export default function ProjectPage() {
                 Generar contexto con IA
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Frase corta que define el tema legal central del proyecto.</p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Descripción y subtemas</Label>
             <Textarea
               id="description"
               placeholder={`Describe en detalle el tema. Por ejemplo:\n- Tipos de despido cubiertos (disciplinario, objetivo, colectivo)\n- Casuísticas habituales de los clientes\n- Subtemas relacionados (indemnización, finiquito, paro, prestaciones)\n- Casos límite que SÍ se quieren cubrir`}
@@ -212,7 +212,7 @@ export default function ProjectPage() {
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">Cuanto más detalle, mejor entenderá la IA el alcance real y evitará clusters genéricos.</p>
+            <p className="text-xs text-muted-foreground">Escribe aquí tu resumen del tema. La IA usará esto como base al generar el contexto: lo respetará y lo ampliará, no lo sustituirá.</p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4">
