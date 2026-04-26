@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useAppStore } from "@/lib/store";
 import {
   getClusters, getTitleRunsWithTitles, createTitleRun, saveTitles,
-  callAI, getActivePrompt, getSeeds, saveQAResult, deleteTitleRun, deleteAllTitleRuns
+  callAI, getActivePrompt, getSeeds, saveQAResult, deleteTitleRun, deleteAllTitleRuns,
+  getProjectById, buildProjectContext
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
