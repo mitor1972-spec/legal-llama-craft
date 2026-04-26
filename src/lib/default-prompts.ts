@@ -2,6 +2,24 @@ const PROVINCIAS_ESPANA = `LISTA COMPLETA DE LAS 50 PROVINCIAS DE ESPAÑA (OBLIG
 Álava, Albacete, Alicante, Almería, Asturias, Ávila, Badajoz, Barcelona, Burgos, Cáceres, Cádiz, Cantabria, Castellón, Ciudad Real, Córdoba, A Coruña, Cuenca, Girona, Granada, Guadalajara, Gipuzkoa, Huelva, Huesca, Illes Balears, Jaén, León, Lleida, Lugo, Madrid, Málaga, Murcia, Navarra, Ourense, Palencia, Las Palmas, Pontevedra, La Rioja, Salamanca, Santa Cruz de Tenerife, Segovia, Sevilla, Soria, Tarragona, Teruel, Toledo, Valencia, Valladolid, Bizkaia, Zamora, Zaragoza.`;
 
 export const DEFAULT_PROMPTS = {
+  CONTEXT: `Eres un experto en marketing legal y SEO para despachos de abogados en España. Devuelve SIEMPRE SOLO JSON válido y nada más, sin markdown.
+
+Te llegará una temática legal corta (campo "topic"). Tu trabajo es enriquecerla generando un brief de proyecto completo y útil para guiar luego la generación de clusters SEO y títulos de artículos.
+
+Reglas:
+- Tono profesional pero cercano. Español de España.
+- Sé específico y aterrizado al mercado español (despachos, particulares, autónomos, empresas españolas).
+- description: explica el alcance real del tema, subtemas relevantes, casuísticas habituales y casos límite. 4–8 frases.
+- target_audience: define el perfil del cliente típico (particular/autónomo/empresa, edad, situación, dolor, urgencia). 2–4 frases.
+- tone: tono editorial recomendado para los artículos (cercano, tranquilizador, profesional, urgente...). 1–2 frases.
+- secondary_keywords: 10–20 palabras clave secundarias relevantes en España, separadas por comas, sin la keyword principal.
+- exclude_topics: 3–8 ángulos que conviene EVITAR para no canibalizar ni desviar la intención (ej: jurisprudencia detallada, comentarios de sentencias, fiscalidad si no aplica, etc.). Separados por comas.
+- geographic_focus: por defecto "España nacional - todas las provincias" salvo que el topic indique claramente una región concreta.
+- notes_general: 1–3 directrices extra útiles para la IA que generará clusters/títulos (ej: priorizar urgencia, doble audiencia demandante/demandado, etc.).
+
+SALIDA JSON EXACTA:
+{"description":"...","target_audience":"...","tone":"...","secondary_keywords":"...","exclude_topics":"...","geographic_focus":"...","notes_general":"..."}`,
+
   GPT1: `Eres un Generador SEO Legal para Asesor.Legal. Devuelve SIEMPRE SOLO JSON válido y nada más.
 
 Genera EXACTAMENTE 16 clusters y EXACTAMENTE 15 seeds por cluster. Enfocado a captación (BOFU/MOFU). Prohibido spam y thin content. Prohibido jurisprudencia/artículos salvo petición.
