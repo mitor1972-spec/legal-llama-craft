@@ -1,17 +1,32 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { getProjects, createProject, deleteProject, generateClustersForProject } from "@/lib/api";
+import { getProjects, createProject, deleteProject, generateClustersForProject, updateProject, getProjectById } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trash2, FolderOpen, Plus, Loader2 } from "lucide-react";
+import { Trash2, FolderOpen, Plus, Loader2, Save, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+
+const EMPTY_FORM = {
+  topic: "",
+  description: "",
+  target_audience: "",
+  secondary_keywords: "",
+  exclude_topics: "",
+  tone: "",
+  geographic_focus: "",
+  notes_general: "",
+};
 
 export default function ProjectPage() {
   const { currentProjectId, currentProjectTopic, setCurrentProject } = useAppStore();
-  const [topic, setTopic] = useState("");
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const loadProjects = async () => {
     try {
@@ -24,17 +39,45 @@ export default function ProjectPage() {
 
   useEffect(() => { loadProjects(); }, []);
 
+  const setField = (k: keyof typeof EMPTY_FORM, v: string) => setForm((f) => ({ ...f, [k]: v }));
+
+  const resetForm = () => {
+    setForm(EMPTY_FORM);
+    setEditingId(null);
+  };
+
+  const handleEdit = async (id: string) => {
+    try {
+      const p = await getProjectById(id);
+      setForm({
+        topic: p.topic || "",
+        description: p.description || "",
+        target_audience: p.target_audience || "",
+        secondary_keywords: p.secondary_keywords || "",
+        exclude_topics: p.exclude_topics || "",
+        tone: p.tone || "",
+        geographic_focus: p.geographic_focus || "",
+        notes_general: p.notes_general || "",
+      });
+      setEditingId(id);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e: any) {
+      toast.error(e.message);
+    }
+  };
+
   const handleCreate = async () => {
-    if (!topic.trim()) return toast.error("Introduce una temática");
+    if (!form.topic.trim()) return toast.error("Introduce una temática");
     setLoading(true);
     try {
-      const p = await createProject(topic.trim());
+      const payload = { ...form, topic: form.topic.trim() };
+      const p = await createProject(payload);
       setCurrentProject(p.id, p.topic);
-      setTopic("");
+      resetForm();
       toast.success("Proyecto creado. Generando clusters...");
       loadProjects();
       // Auto-generate clusters in background
-      generateClustersForProject(p.id, p.topic)
+      generateClustersForProject(p.id, p)
         .then((count) => toast.success(`${count} clusters generados automáticamente`))
         .catch((err) => toast.error(`Error generando clusters: ${err.message}`));
     } catch (e: any) {
@@ -44,10 +87,40 @@ export default function ProjectPage() {
     }
   };
 
+  const handleSaveEdits = async () => {
+    if (!editingId) return;
+    if (!form.topic.trim()) return toast.error("La temática no puede estar vacía");
+    setSaving(true);
+    try {
+      await updateProject(editingId, { ...form, topic: form.topic.trim() });
+      toast.success("Proyecto actualizado");
+      if (currentProjectId === editingId) setCurrentProject(editingId, form.topic.trim());
+      loadProjects();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRegenClusters = async () => {
+    if (!editingId) return;
+    toast.info("Regenerando clusters con el contexto actualizado...");
+    try {
+      // Save first to make sure we use the latest context
+      await updateProject(editingId, { ...form, topic: form.topic.trim() });
+      const count = await generateClustersForProject(editingId, { ...form, topic: form.topic.trim() });
+      toast.success(`${count} clusters regenerados`);
+    } catch (e: any) {
+      toast.error(`Error: ${e.message}`);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await deleteProject(id);
       if (currentProjectId === id) setCurrentProject(null, "");
+      if (editingId === id) resetForm();
       toast.success("Proyecto eliminado");
       loadProjects();
     } catch (e: any) {
@@ -59,26 +132,134 @@ export default function ProjectPage() {
     <div className="space-y-6">
       <div>
         <h2 className="font-display text-2xl font-bold mb-1">Proyecto</h2>
-        <p className="text-muted-foreground text-sm">Crea o selecciona un proyecto para empezar a generar clusters y títulos SEO.</p>
+        <p className="text-muted-foreground text-sm">
+          Cuanto más contexto aportes (descripción, audiencia, keywords secundarias, temas a evitar...), mejores y más relevantes serán los clusters y títulos que genere la IA.
+        </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Nuevo proyecto</CardTitle>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>{editingId ? "Editar proyecto" : "Nuevo proyecto"}</span>
+            {editingId && (
+              <Button variant="ghost" size="sm" onClick={resetForm}>
+                Cancelar edición
+              </Button>
+            )}
+          </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-3">
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="topic">Temática principal *</Label>
             <Input
-              placeholder="Ej: Derecho laboral despidos"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              className="flex-1"
+              id="topic"
+              placeholder="Ej: Despidos disciplinarios y procedentes"
+              value={form.topic}
+              onChange={(e) => setField("topic", e.target.value)}
             />
-            <Button onClick={handleCreate} disabled={loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
-              Crear
-            </Button>
+            <p className="text-xs text-muted-foreground">Frase corta que define el tema legal central del proyecto.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Descripción y subtemas</Label>
+            <Textarea
+              id="description"
+              placeholder={`Describe en detalle el tema. Por ejemplo:\n- Tipos de despido cubiertos (disciplinario, objetivo, colectivo)\n- Casuísticas habituales de los clientes\n- Subtemas relacionados (indemnización, finiquito, paro, prestaciones)\n- Casos límite que SÍ se quieren cubrir`}
+              rows={5}
+              value={form.description}
+              onChange={(e) => setField("description", e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Cuanto más detalle, mejor entenderá la IA el alcance real y evitará clusters genéricos.</p>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="audience">Audiencia objetivo</Label>
+              <Textarea
+                id="audience"
+                placeholder="Ej: Trabajadores particulares en España, edad 25-55, sin conocimiento legal previo, buscan defenderse de un despido reciente."
+                rows={3}
+                value={form.target_audience}
+                onChange={(e) => setField("target_audience", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tone">Tono editorial</Label>
+              <Textarea
+                id="tone"
+                placeholder="Ej: Cercano y tranquilizador, evita tecnicismos, transmite urgencia controlada y confianza profesional."
+                rows={3}
+                value={form.tone}
+                onChange={(e) => setField("tone", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="kw">Palabras clave secundarias</Label>
+              <Textarea
+                id="kw"
+                placeholder="Ej: indemnización despido, finiquito, despido improcedente, carta de despido, papeleta conciliación, SMAC"
+                rows={3}
+                value={form.secondary_keywords}
+                onChange={(e) => setField("secondary_keywords", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Separadas por comas o saltos de línea.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="excl">Temas / ángulos a evitar</Label>
+              <Textarea
+                id="excl"
+                placeholder="Ej: jurisprudencia detallada, comentarios de sentencias, derecho penal, fiscalidad."
+                rows={3}
+                value={form.exclude_topics}
+                onChange={(e) => setField("exclude_topics", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">La IA no generará clusters ni títulos sobre estos temas.</p>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="geo">Foco geográfico</Label>
+              <Input
+                id="geo"
+                placeholder="Ej: España nacional / Solo Cataluña / Madrid y Barcelona"
+                value={form.geographic_focus}
+                onChange={(e) => setField("geographic_focus", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">Si lo dejas vacío, se usarán todas las provincias de España.</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="notes">Notas adicionales</Label>
+              <Input
+                id="notes"
+                placeholder="Cualquier directriz extra para la IA"
+                value={form.notes_general}
+                onChange={(e) => setField("notes_general", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2">
+            {editingId ? (
+              <>
+                <Button onClick={handleSaveEdits} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Save className="w-4 h-4 mr-1" />}
+                  Guardar cambios
+                </Button>
+                <Button variant="outline" onClick={handleRegenClusters}>
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  Guardar y regenerar clusters
+                </Button>
+              </>
+            ) : (
+              <Button onClick={handleCreate} disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Plus className="w-4 h-4 mr-1" />}
+                Crear proyecto y generar clusters
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -109,6 +290,9 @@ export default function ProjectPage() {
                     <p className="text-xs text-muted-foreground">{new Date(p.created_at).toLocaleDateString("es-ES")}</p>
                   </div>
                   <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(p.id)}>
+                      Editar
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { getClusters, getSeeds, updateCluster, updateSeed, replaceSeeds, upsertClusters, callAI, getActivePrompt, saveQAResult } from "@/lib/api";
+import { getClusters, getSeeds, updateCluster, updateSeed, replaceSeeds, upsertClusters, callAI, getActivePrompt, saveQAResult, getProjectById, buildProjectContext } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,12 @@ export default function ClustersPage() {
   const [loading, setLoading] = useState(false);
   const [regenId, setRegenId] = useState<string | null>(null);
   const [qaLoading, setQaLoading] = useState(false);
+
+  const loadProjectContext = async () => {
+    if (!currentProjectId) return { topic: currentProjectTopic };
+    const p = await getProjectById(currentProjectId);
+    return buildProjectContext(p);
+  };
 
   const loadClusters = async () => {
     if (!currentProjectId) return;
@@ -46,7 +52,8 @@ export default function ClustersPage() {
     setLoading(true);
     try {
       const prompt = await getActivePrompt("GPT1");
-      const result = await callAI("CLUSTERS", prompt, { topic: currentProjectTopic, notes: "" });
+      const ctx = await loadProjectContext();
+      const result = await callAI("CLUSTERS", prompt, { ...ctx, notes: "" });
       if (result?.clusters) {
         await upsertClusters(currentProjectId, result.clusters);
         toast.success(`${result.clusters.length} clusters generados`);
@@ -67,8 +74,9 @@ export default function ClustersPage() {
     setRegenId(cluster.id);
     try {
       const prompt = await getActivePrompt("GPT1");
+      const ctx = await loadProjectContext();
       const result = await callAI("CLUSTERS", prompt, {
-        topic: currentProjectTopic,
+        ...ctx,
         notes: `Regenera SOLO el cluster "${cluster.name}" con intención ${cluster.intent}. Devuelve el mismo formato JSON con un solo cluster.`,
       });
       if (result?.clusters?.[0]) {

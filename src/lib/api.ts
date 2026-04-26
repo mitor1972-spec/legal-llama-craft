@@ -1,6 +1,38 @@
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_PROMPTS } from "./default-prompts";
 
+// ========== PROJECT CONTEXT ==========
+export interface ProjectContext {
+  topic: string;
+  description?: string;
+  target_audience?: string;
+  secondary_keywords?: string;
+  exclude_topics?: string;
+  tone?: string;
+  geographic_focus?: string;
+  notes_general?: string;
+}
+
+/** Build the rich context block sent to the AI for clusters/titles generation. */
+export function buildProjectContext(p: Partial<ProjectContext> & { topic: string }) {
+  return {
+    topic: p.topic,
+    description: (p.description || "").trim(),
+    target_audience: (p.target_audience || "").trim(),
+    secondary_keywords: (p.secondary_keywords || "").trim(),
+    exclude_topics: (p.exclude_topics || "").trim(),
+    tone: (p.tone || "").trim(),
+    geographic_focus: (p.geographic_focus || "").trim(),
+    notes_general: (p.notes_general || "").trim(),
+  };
+}
+
+export async function getProjectById(id: string) {
+  const { data, error } = await supabase.from("projects").select("*").eq("id", id).single();
+  if (error) throw error;
+  return data;
+}
+
 // ========== PROJECTS ==========
 export async function getProjects() {
   const { data, error } = await supabase.from("projects").select("*").order("updated_at", { ascending: false });
@@ -8,16 +40,20 @@ export async function getProjects() {
   return data;
 }
 
-export async function createProject(topic: string) {
-  const { data, error } = await supabase.from("projects").insert({ topic }).select().single();
+export async function createProject(input: string | (Partial<ProjectContext> & { topic: string })) {
+  const payload = typeof input === "string" ? { topic: input } : input;
+  const { data, error } = await supabase.from("projects").insert(payload).select().single();
   if (error) throw error;
   return data;
 }
 
 /** Generate clusters automatically for a project (fire-and-forget friendly) */
-export async function generateClustersForProject(projectId: string, topic: string) {
+export async function generateClustersForProject(projectId: string, topicOrProject: string | (Partial<ProjectContext> & { topic: string })) {
   const prompt = await getActivePrompt("GPT1");
-  const result = await callAI("CLUSTERS", prompt, { topic, notes: "" });
+  const ctx = typeof topicOrProject === "string"
+    ? buildProjectContext({ topic: topicOrProject })
+    : buildProjectContext(topicOrProject);
+  const result = await callAI("CLUSTERS", prompt, { ...ctx, notes: "" });
   if (result?.clusters) {
     await upsertClusters(projectId, result.clusters);
     return result.clusters.length;
@@ -25,7 +61,7 @@ export async function generateClustersForProject(projectId: string, topic: strin
   throw new Error("Respuesta inesperada de la IA");
 }
 
-export async function updateProject(id: string, updates: { topic?: string; notes_general?: string }) {
+export async function updateProject(id: string, updates: Partial<ProjectContext>) {
   const { error } = await supabase.from("projects").update(updates).eq("id", id);
   if (error) throw error;
 }
