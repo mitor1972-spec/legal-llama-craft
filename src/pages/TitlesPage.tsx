@@ -121,7 +121,7 @@ export default function TitlesPage() {
 
   // Split large counts into chunks to avoid token overruns
   const CHUNK_SIZE = 50;
-  const MAX_RETRIES_PER_CHUNK = 4;
+  const MAX_RETRIES_PER_CHUNK = 6;
   const AVOID_LIST_WINDOW = 120;
 
   const normalizeTitle = (value: unknown) => {
@@ -158,42 +158,46 @@ export default function TitlesPage() {
 
       while (chunkTitles.length < chunkTarget && attempts < MAX_RETRIES_PER_CHUNK) {
         const missing = chunkTarget - chunkTitles.length;
-        const result = await callAI("TITLES", prompt, {
-          ...projectCtx,
-          count: missing,
-          block_name: blockName,
-          include_cluster_ids: selectedClusters,
-          cluster_names: selectedClusterNames,
-          seed_pack: seedPack,
-          constraints: {
-            exclude_topics: (projectCtx.exclude_topics || "")
-              .split(/[,\n;]+/).map((s: string) => s.trim()).filter(Boolean),
-            year_hint: 2026,
-          },
-          retry_hint:
-            attempts === 0
-              ? `Devuelve exactamente ${missing} títulos válidos.`
-              : `Faltan ${missing} títulos. Devuelve exactamente ${missing} títulos NUEVOS y distintos.`,
-          avoid_list: [...avoidList, ...allTitles, ...chunkTitles].slice(-AVOID_LIST_WINDOW),
-        });
+        try {
+          const result = await callAI("TITLES", prompt, {
+            ...projectCtx,
+            count: missing,
+            block_name: blockName,
+            include_cluster_ids: selectedClusters,
+            cluster_names: selectedClusterNames,
+            seed_pack: seedPack,
+            constraints: {
+              exclude_topics: (projectCtx.exclude_topics || "")
+                .split(/[,\n;]+/).map((s: string) => s.trim()).filter(Boolean),
+              year_hint: 2026,
+            },
+            retry_hint:
+              attempts === 0
+                ? `Devuelve exactamente ${missing} títulos válidos.`
+                : `Faltan ${missing} títulos. Devuelve exactamente ${missing} títulos NUEVOS y distintos.`,
+            avoid_list: [...avoidList, ...allTitles, ...chunkTitles].slice(-AVOID_LIST_WINDOW),
+          });
 
-        const generatedTitles = Array.isArray(result?.titles) ? result.titles : [];
-        for (const rawTitle of generatedTitles) {
-          const normalizedTitle = normalizeTitle(rawTitle);
-          const normalizedKey = normalizedTitle.toLowerCase();
-          if (!normalizedTitle || seen.has(normalizedKey)) continue;
-          seen.add(normalizedKey);
-          chunkTitles.push(normalizedTitle);
-          if (chunkTitles.length === chunkTarget) break;
+          const generatedTitles = Array.isArray(result?.titles) ? result.titles : [];
+          for (const rawTitle of generatedTitles) {
+            const normalizedTitle = normalizeTitle(rawTitle);
+            const normalizedKey = normalizedTitle.toLowerCase();
+            if (!normalizedTitle || seen.has(normalizedKey)) continue;
+            seen.add(normalizedKey);
+            chunkTitles.push(normalizedTitle);
+            if (chunkTitles.length === chunkTarget) break;
+          }
+        } catch (err: any) {
+          console.warn(`[${blockName}] chunk attempt ${attempts + 1} falló:`, err?.message);
         }
 
         attempts++;
       }
 
-      if (chunkTitles.length < chunkTarget) {
-        throw new Error(`La IA no devolvió los ${chunkTarget} títulos solicitados para ${blockName}.`);
+      // Guardar lo que se haya conseguido aunque sea parcial — no abortar el bloque.
+      if (chunkTitles.length === 0) {
+        console.warn(`[${blockName}] chunk vacío tras ${MAX_RETRIES_PER_CHUNK} intentos, continuo.`);
       }
-
       allTitles.push(...chunkTitles);
     }
 
@@ -232,19 +236,37 @@ export default function TitlesPage() {
       } else {
         const dist = distributeCounts(n, mixPcts);
         let totalGenerated = 0;
+        const failedBlocks: string[] = [];
 
         for (const bk of MIX_BLOCKS) {
           const bkCount = dist[bk];
           if (bkCount <= 0) continue;
           toast.info(`Generando ${bkCount} títulos para ${bk}...`);
-          const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
-          const run = await createTitleRun(currentProjectId, bk, bkCount, selectedClusters);
-          await saveTitles(run.id, titles);
-          totalGenerated += titles.length;
-          titles.forEach((t: string) => avoidList.push(t));
+          try {
+            const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
+            if (titles.length > 0) {
+              const run = await createTitleRun(currentProjectId, bk, titles.length, selectedClusters);
+              await saveTitles(run.id, titles);
+              totalGenerated += titles.length;
+              titles.forEach((t: string) => avoidList.push(t));
+              if (titles.length < bkCount) {
+                toast.warning(`${bk}: ${titles.length}/${bkCount} títulos (parcial)`);
+              }
+            } else {
+              failedBlocks.push(bk);
+            }
+          } catch (err: any) {
+            console.error(`[${bk}] error completo:`, err);
+            toast.error(`${bk} falló: ${err?.message || "error desconocido"}. Continuando...`);
+            failedBlocks.push(bk);
+          }
         }
 
-        toast.success(`Mix completo: ${totalGenerated} títulos generados en 4 bloques`);
+        if (failedBlocks.length === 0) {
+          toast.success(`Mix completo: ${totalGenerated} títulos generados en 4 bloques`);
+        } else {
+          toast.warning(`Mix parcial: ${totalGenerated} títulos. Bloques con problemas: ${failedBlocks.join(", ")}`);
+        }
       }
 
       await loadData();
