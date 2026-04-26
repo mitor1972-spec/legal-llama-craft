@@ -43,14 +43,14 @@ export default function TitlesPage() {
   const [clusters, setClusters] = useState<any[]>([]);
   const [selectedClusters, setSelectedClusters] = useState<string[]>([]);
   const [block, setBlock] = useState("B1");
-  const [count, setCount] = useState("200");
+  const [count, setCount] = useState("2000");
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [qaLoading, setQaLoading] = useState(false);
   const [replaceMode, setReplaceMode] = useState(false);
 
-  // Mix mode
-  const [genMode, setGenMode] = useState<"SINGLE" | "MIX">("SINGLE");
+  // Mix mode (por defecto: MIX = mes completo)
+  const [genMode, setGenMode] = useState<"SINGLE" | "MIX">("MIX");
   const [mixPcts, setMixPcts] = useState<Record<string, number>>({ ...DEFAULT_MIX_PCTS });
 
   // Filters
@@ -347,10 +347,10 @@ export default function TitlesPage() {
                 max={5000}
                 value={count}
                 onChange={(e) => setCount(e.target.value)}
-                placeholder="Ej: 200"
+                placeholder="Ej: 2000"
                 className="h-9"
               />
-              <span className="text-[10px] text-muted-foreground">Sugeridos: 100, 200, 500, 1000, 3000</span>
+              <span className="text-[10px] text-muted-foreground">Sugeridos: 500, 1000, 2000 (mes), 3000, 5000</span>
             </div>
           </div>
 
