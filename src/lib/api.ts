@@ -33,6 +33,30 @@ export async function getProjectById(id: string) {
   return data;
 }
 
+/** Auto-generate the rich project context (description, audience, keywords...) from a topic. */
+export async function generateProjectContext(topic: string): Promise<{
+  description: string;
+  target_audience: string;
+  tone: string;
+  secondary_keywords: string;
+  exclude_topics: string;
+  geographic_focus: string;
+  notes_general: string;
+}> {
+  const prompt = DEFAULT_PROMPTS.CONTEXT;
+  const result = await callAI("CONTEXT", prompt, { topic });
+  if (!result || typeof result !== "object") throw new Error("Respuesta inesperada de la IA");
+  return {
+    description: result.description || "",
+    target_audience: result.target_audience || "",
+    tone: result.tone || "",
+    secondary_keywords: result.secondary_keywords || "",
+    exclude_topics: result.exclude_topics || "",
+    geographic_focus: result.geographic_focus || "",
+    notes_general: result.notes_general || "",
+  };
+}
+
 // ========== PROJECTS ==========
 export async function getProjects() {
   const { data, error } = await supabase.from("projects").select("*").order("updated_at", { ascending: false });
