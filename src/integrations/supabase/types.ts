@@ -58,22 +58,40 @@ export type Database = {
       projects: {
         Row: {
           created_at: string | null
+          description: string | null
+          exclude_topics: string | null
+          geographic_focus: string | null
           id: string
           notes_general: string | null
+          secondary_keywords: string | null
+          target_audience: string | null
+          tone: string | null
           topic: string
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
+          description?: string | null
+          exclude_topics?: string | null
+          geographic_focus?: string | null
           id?: string
           notes_general?: string | null
+          secondary_keywords?: string | null
+          target_audience?: string | null
+          tone?: string | null
           topic: string
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
+          description?: string | null
+          exclude_topics?: string | null
+          geographic_focus?: string | null
           id?: string
           notes_general?: string | null
+          secondary_keywords?: string | null
+          target_audience?: string | null
+          tone?: string | null
           topic?: string
           updated_at?: string | null
         }

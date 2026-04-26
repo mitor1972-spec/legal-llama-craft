@@ -1,0 +1,8 @@
+
+ALTER TABLE public.projects
+  ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS target_audience TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS secondary_keywords TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS exclude_topics TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS tone TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS geographic_focus TEXT DEFAULT '';
