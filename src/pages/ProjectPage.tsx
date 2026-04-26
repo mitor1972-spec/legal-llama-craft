@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/lib/store";
-import { getProjects, createProject, deleteProject, generateClustersForProject, updateProject, getProjectById } from "@/lib/api";
+import { getProjects, createProject, deleteProject, generateClustersForProject, updateProject, getProjectById, generateProjectContext } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trash2, FolderOpen, Plus, Loader2, Save, Sparkles } from "lucide-react";
+import { Trash2, FolderOpen, Plus, Loader2, Save, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 const EMPTY_FORM = {
@@ -25,6 +25,7 @@ export default function ProjectPage() {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [contextLoading, setContextLoading] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -63,6 +64,29 @@ export default function ProjectPage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (e: any) {
       toast.error(e.message);
+    }
+  };
+
+  const handleAutoContext = async () => {
+    if (!form.topic.trim()) return toast.error("Escribe primero la temática");
+    setContextLoading(true);
+    try {
+      const ctx = await generateProjectContext(form.topic.trim());
+      setForm((f) => ({
+        ...f,
+        description: ctx.description || f.description,
+        target_audience: ctx.target_audience || f.target_audience,
+        tone: ctx.tone || f.tone,
+        secondary_keywords: ctx.secondary_keywords || f.secondary_keywords,
+        exclude_topics: ctx.exclude_topics || f.exclude_topics,
+        geographic_focus: ctx.geographic_focus || f.geographic_focus,
+        notes_general: ctx.notes_general || f.notes_general,
+      }));
+      toast.success("Contexto generado. Revísalo y ajusta lo que necesites.");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setContextLoading(false);
     }
   };
 
@@ -151,12 +175,27 @@ export default function ProjectPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="topic">Temática principal *</Label>
-            <Input
-              id="topic"
-              placeholder="Ej: Despidos disciplinarios y procedentes"
-              value={form.topic}
-              onChange={(e) => setField("topic", e.target.value)}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="topic"
+                placeholder="Ej: Despidos disciplinarios y procedentes"
+                value={form.topic}
+                onChange={(e) => setField("topic", e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleAutoContext}
+                disabled={contextLoading || !form.topic.trim()}
+                title="La IA rellenará por ti la descripción, audiencia, tono, keywords, etc."
+              >
+                {contextLoading
+                  ? <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                  : <Wand2 className="w-4 h-4 mr-1" />}
+                Generar contexto con IA
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">Frase corta que define el tema legal central del proyecto.</p>
           </div>
 
