@@ -347,10 +347,10 @@ export default function TitlesPage() {
                 max={5000}
                 value={count}
                 onChange={(e) => setCount(e.target.value)}
-                placeholder="Ej: 200"
+                placeholder="Ej: 2000"
                 className="h-9"
               />
-              <span className="text-[10px] text-muted-foreground">Sugeridos: 100, 200, 500, 1000, 3000</span>
+              <span className="text-[10px] text-muted-foreground">Sugeridos: 500, 1000, 2000 (mes), 3000, 5000</span>
             </div>
           </div>
 
