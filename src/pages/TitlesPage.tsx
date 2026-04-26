@@ -135,7 +135,8 @@ export default function TitlesPage() {
     prompt: string,
     selectedClusterNames: string[],
     seedPack: string[],
-    avoidList: string[]
+    avoidList: string[],
+    projectCtx: Record<string, any>
   ): Promise<string[]> => {
     const chunks: number[] = [];
     let remaining = n;
@@ -158,13 +159,17 @@ export default function TitlesPage() {
       while (chunkTitles.length < chunkTarget && attempts < MAX_RETRIES_PER_CHUNK) {
         const missing = chunkTarget - chunkTitles.length;
         const result = await callAI("TITLES", prompt, {
-          topic: currentProjectTopic,
+          ...projectCtx,
           count: missing,
           block_name: blockName,
           include_cluster_ids: selectedClusters,
           cluster_names: selectedClusterNames,
           seed_pack: seedPack,
-          constraints: { exclude_topics: [], year_hint: 2026 },
+          constraints: {
+            exclude_topics: (projectCtx.exclude_topics || "")
+              .split(/[,\n;]+/).map((s: string) => s.trim()).filter(Boolean),
+            year_hint: 2026,
+          },
           retry_hint:
             attempts === 0
               ? `Devuelve exactamente ${missing} títulos válidos.`
@@ -208,6 +213,8 @@ export default function TitlesPage() {
       }
 
       const prompt = await getActivePrompt("GPT2");
+      const project = await getProjectById(currentProjectId);
+      const projectCtx = buildProjectContext(project);
       const selectedClusterNames = clusters.filter((c) => selectedClusters.includes(c.id)).map((c) => c.name);
 
       const seedGroups = await Promise.all(selectedClusters.map((cId) => getSeeds(cId)));
@@ -218,7 +225,7 @@ export default function TitlesPage() {
         : [];
 
       if (genMode === "SINGLE") {
-        const titles = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList);
+        const titles = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
         const run = await createTitleRun(currentProjectId, block, n, selectedClusters);
         await saveTitles(run.id, titles);
         toast.success(`${n} títulos generados (${block})`);
@@ -230,7 +237,7 @@ export default function TitlesPage() {
           const bkCount = dist[bk];
           if (bkCount <= 0) continue;
           toast.info(`Generando ${bkCount} títulos para ${bk}...`);
-          const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList);
+          const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
           const run = await createTitleRun(currentProjectId, bk, bkCount, selectedClusters);
           await saveTitles(run.id, titles);
           totalGenerated += titles.length;
