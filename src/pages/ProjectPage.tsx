@@ -69,20 +69,24 @@ export default function ProjectPage() {
 
   const handleAutoContext = async () => {
     if (!form.topic.trim()) return toast.error("Escribe primero la temática");
+    if (!form.description.trim()) {
+      return toast.error("Escribe también una descripción / resumen del tema antes de generar el contexto");
+    }
     setContextLoading(true);
     try {
-      const ctx = await generateProjectContext(form.topic.trim());
+      const ctx = await generateProjectContext(form.topic.trim(), form.description.trim());
       setForm((f) => ({
         ...f,
+        // La IA enriquece la descripción que tú escribiste como base
         description: ctx.description || f.description,
         target_audience: ctx.target_audience || f.target_audience,
         tone: ctx.tone || f.tone,
         secondary_keywords: ctx.secondary_keywords || f.secondary_keywords,
         exclude_topics: ctx.exclude_topics || f.exclude_topics,
         geographic_focus: ctx.geographic_focus || f.geographic_focus,
-        notes_general: ctx.notes_general || f.notes_general,
+        // Notas adicionales NO se tocan: las rellena el usuario manualmente
       }));
-      toast.success("Contexto generado. Revísalo y ajusta lo que necesites.");
+      toast.success("Contexto generado. Revísalo y añade notas adicionales si quieres.");
     } catch (e: any) {
       toast.error(e.message);
     } finally {
