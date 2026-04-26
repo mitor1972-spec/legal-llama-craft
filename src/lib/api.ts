@@ -33,8 +33,8 @@ export async function getProjectById(id: string) {
   return data;
 }
 
-/** Auto-generate the rich project context (description, audience, keywords...) from a topic. */
-export async function generateProjectContext(topic: string): Promise<{
+/** Auto-generate the rich project context (description, audience, keywords...) from a topic + optional user description. */
+export async function generateProjectContext(topic: string, description: string = ""): Promise<{
   description: string;
   target_audience: string;
   tone: string;
@@ -44,7 +44,7 @@ export async function generateProjectContext(topic: string): Promise<{
   notes_general: string;
 }> {
   const prompt = DEFAULT_PROMPTS.CONTEXT;
-  const result = await callAI("CONTEXT", prompt, { topic });
+  const result = await callAI("CONTEXT", prompt, { topic, description: (description || "").trim() });
   if (!result || typeof result !== "object") throw new Error("Respuesta inesperada de la IA");
   return {
     description: result.description || "",
