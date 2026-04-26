@@ -43,14 +43,14 @@ export default function TitlesPage() {
   const [clusters, setClusters] = useState<any[]>([]);
   const [selectedClusters, setSelectedClusters] = useState<string[]>([]);
   const [block, setBlock] = useState("B1");
-  const [count, setCount] = useState("200");
+  const [count, setCount] = useState("2000");
   const [batches, setBatches] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [qaLoading, setQaLoading] = useState(false);
   const [replaceMode, setReplaceMode] = useState(false);
 
-  // Mix mode
-  const [genMode, setGenMode] = useState<"SINGLE" | "MIX">("SINGLE");
+  // Mix mode (por defecto: MIX = mes completo)
+  const [genMode, setGenMode] = useState<"SINGLE" | "MIX">("MIX");
   const [mixPcts, setMixPcts] = useState<Record<string, number>>({ ...DEFAULT_MIX_PCTS });
 
   // Filters
