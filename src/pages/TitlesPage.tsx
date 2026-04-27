@@ -258,7 +258,7 @@ export default function TitlesPage() {
         : [];
 
       if (genMode === "SINGLE") {
-        const titles = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
+        const titles = await generateForBlock(block, n, prompt, selectedClusters, selectedClusterNames, seedPack, avoidList, projectCtx);
         const run = await createTitleRun(currentProjectId, block, n, selectedClusters);
         await saveTitles(run.id, titles);
         toast.success(`${n} títulos generados (${block})`);
@@ -272,7 +272,7 @@ export default function TitlesPage() {
           if (bkCount <= 0) continue;
           toast.info(`Generando ${bkCount} títulos para ${bk}...`);
           try {
-            const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
+            const titles = await generateForBlock(bk, bkCount, prompt, selectedClusters, selectedClusterNames, seedPack, avoidList, projectCtx);
             if (titles.length > 0) {
               const run = await createTitleRun(currentProjectId, bk, titles.length, selectedClusters);
               await saveTitles(run.id, titles);
