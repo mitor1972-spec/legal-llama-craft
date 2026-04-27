@@ -54,7 +54,33 @@ serve(async (req) => {
       }
     };
 
-    const response = await callOpenAI(messages);
+    // Retry wrapper: handles 5xx / network errors from OpenAI (e.g. Cloudflare 502)
+    const callOpenAIWithRetry = async (msgs: any[], maxAttempts = 4) => {
+      let lastErr: unknown = null;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const res = await callOpenAI(msgs);
+          // Retry on transient upstream errors
+          if (res.status >= 500 && res.status < 600 && attempt < maxAttempts) {
+            const body = await res.text();
+            console.warn(`OpenAI ${res.status} on attempt ${attempt}, retrying...`, body.slice(0, 200));
+            const delay = Math.min(1000 * 2 ** (attempt - 1), 8000) + Math.random() * 500;
+            await new Promise((r) => setTimeout(r, delay));
+            continue;
+          }
+          return res;
+        } catch (err) {
+          lastErr = err;
+          console.warn(`OpenAI fetch threw on attempt ${attempt}:`, err);
+          if (attempt >= maxAttempts) break;
+          const delay = Math.min(1000 * 2 ** (attempt - 1), 8000) + Math.random() * 500;
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+      throw lastErr ?? new Error("OpenAI request failed after retries");
+    };
+
+    const response = await callOpenAIWithRetry(messages);
 
     if (response.status === 429) {
       return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait and try again." }), {
@@ -121,7 +147,7 @@ serve(async (req) => {
         { role: "user", content: "Tu respuesta no es JSON válido. Devuelve SOLO JSON válido, sin texto extra, sin markdown." },
       ];
 
-      const retryResponse = await callOpenAI(retryMessages);
+      const retryResponse = await callOpenAIWithRetry(retryMessages);
 
       if (retryResponse.ok) {
         const retryData = await retryResponse.json();
