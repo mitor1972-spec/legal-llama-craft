@@ -122,6 +122,7 @@ export default function TitlesPage() {
   // Split large counts into chunks to avoid token overruns
   const CHUNK_SIZE = 50;
   const MAX_RETRIES_PER_CHUNK = 6;
+  const MAX_EMPTY_CHUNKS_PER_BLOCK = 3;
   const AVOID_LIST_WINDOW = 120;
 
   const normalizeTitle = (value: unknown) => {
@@ -266,30 +267,73 @@ export default function TitlesPage() {
         const dist = distributeCounts(n, mixPcts);
         let totalGenerated = 0;
         const failedBlocks: string[] = [];
+        const globalSeen = new Set(
+          avoidList
+            .map((title) => normalizeTitle(title).toLowerCase())
+            .filter(Boolean)
+        );
+        const globalAvoidList = [...avoidList];
+        const jobs = await Promise.all(
+          MIX_BLOCKS
+            .map((bk) => ({ blockName: bk, target: dist[bk] }))
+            .filter((job) => job.target > 0)
+            .map(async (job) => {
+              const run = await createTitleRun(currentProjectId, job.blockName, job.target, selectedClusters);
+              return { ...job, runId: run.id, generated: 0, emptyChunks: 0, done: false };
+            })
+        );
 
-        for (const bk of MIX_BLOCKS) {
-          const bkCount = dist[bk];
-          if (bkCount <= 0) continue;
-          toast.info(`Generando ${bkCount} títulos para ${bk}...`);
-          try {
-            const titles = await generateForBlock(bk, bkCount, prompt, selectedClusters, selectedClusterNames, seedPack, avoidList, projectCtx);
-            if (titles.length > 0) {
-              const run = await createTitleRun(currentProjectId, bk, titles.length, selectedClusters);
-              await saveTitles(run.id, titles);
-              totalGenerated += titles.length;
-              titles.forEach((t: string) => avoidList.push(t));
-              if (titles.length < bkCount) {
-                toast.warning(`${bk}: ${titles.length}/${bkCount} títulos (parcial)`);
+        while (jobs.some((job) => !job.done)) {
+          for (const job of jobs) {
+            if (job.done) continue;
+            const remaining = job.target - job.generated;
+            const chunkTarget = Math.min(remaining, CHUNK_SIZE);
+            toast.info(`Generando ${job.blockName}: ${job.generated}/${job.target}...`);
+
+            try {
+              const titles = await generateTitleChunk(
+                job.blockName,
+                chunkTarget,
+                prompt,
+                selectedClusters,
+                selectedClusterNames,
+                seedPack,
+                globalAvoidList,
+                projectCtx,
+                globalSeen
+              );
+
+              if (titles.length > 0) {
+                await saveTitles(job.runId, titles);
+                job.generated += titles.length;
+                totalGenerated += titles.length;
+                job.emptyChunks = 0;
+                globalAvoidList.push(...titles);
+              } else {
+                job.emptyChunks++;
               }
-            } else {
-              failedBlocks.push(bk);
+
+              if (job.generated >= job.target) job.done = true;
+              if (job.emptyChunks >= MAX_EMPTY_CHUNKS_PER_BLOCK) {
+                job.done = true;
+                failedBlocks.push(job.blockName);
+                toast.warning(`${job.blockName}: detenido tras varios chunks vacíos (${job.generated}/${job.target})`);
+              }
+            } catch (err: any) {
+              console.error(`[${job.blockName}] error completo:`, err);
+              job.emptyChunks++;
+              if (job.emptyChunks >= MAX_EMPTY_CHUNKS_PER_BLOCK) {
+                job.done = true;
+                failedBlocks.push(job.blockName);
+                toast.error(`${job.blockName} falló: ${err?.message || "error desconocido"}. Continuando...`);
+              }
             }
-          } catch (err: any) {
-            console.error(`[${bk}] error completo:`, err);
-            toast.error(`${bk} falló: ${err?.message || "error desconocido"}. Continuando...`);
-            failedBlocks.push(bk);
           }
         }
+
+        jobs.forEach((job) => {
+          if (job.generated < job.target && !failedBlocks.includes(job.blockName)) failedBlocks.push(job.blockName);
+        });
 
         if (failedBlocks.length === 0) {
           toast.success(`Mix completo: ${totalGenerated} títulos generados en 4 bloques`);
