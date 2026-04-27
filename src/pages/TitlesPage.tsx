@@ -122,6 +122,7 @@ export default function TitlesPage() {
   // Split large counts into chunks to avoid token overruns
   const CHUNK_SIZE = 50;
   const MAX_RETRIES_PER_CHUNK = 6;
+  const MAX_EMPTY_CHUNKS_PER_BLOCK = 3;
   const AVOID_LIST_WINDOW = 120;
 
   const normalizeTitle = (value: unknown) => {
@@ -129,10 +130,70 @@ export default function TitlesPage() {
     return value.replace(/,/g, " - ").replace(/\s+/g, " ").trim();
   };
 
+  const generateTitleChunk = async (
+    blockName: string,
+    chunkTarget: number,
+    prompt: string,
+    selectedClusterIds: string[],
+    selectedClusterNames: string[],
+    seedPack: string[],
+    avoidList: string[],
+    projectCtx: Record<string, any>,
+    seen: Set<string>
+  ): Promise<string[]> => {
+    const chunkTitles: string[] = [];
+    let attempts = 0;
+
+    while (chunkTitles.length < chunkTarget && attempts < MAX_RETRIES_PER_CHUNK) {
+      const missing = chunkTarget - chunkTitles.length;
+      try {
+        const result = await callAI("TITLES", prompt, {
+          ...projectCtx,
+          count: missing,
+          block_name: blockName,
+          include_cluster_ids: selectedClusterIds,
+          cluster_names: selectedClusterNames,
+          seed_pack: seedPack,
+          constraints: {
+            exclude_topics: (projectCtx.exclude_topics || "")
+              .split(/[,\n;]+/).map((s: string) => s.trim()).filter(Boolean),
+            year_hint: 2026,
+          },
+          retry_hint:
+            attempts === 0
+              ? `Bloque ${blockName}. Devuelve exactamente ${missing} títulos válidos para este bloque.`
+              : `Bloque ${blockName}. Faltan ${missing} títulos. Devuelve exactamente ${missing} títulos NUEVOS y distintos.`,
+          avoid_list: [...avoidList, ...chunkTitles].slice(-AVOID_LIST_WINDOW),
+        });
+
+        const generatedTitles = Array.isArray(result?.titles) ? result.titles : [];
+        for (const rawTitle of generatedTitles) {
+          const normalizedTitle = normalizeTitle(rawTitle);
+          const normalizedKey = normalizedTitle.toLowerCase();
+          if (!normalizedTitle || seen.has(normalizedKey)) continue;
+          seen.add(normalizedKey);
+          chunkTitles.push(normalizedTitle);
+          if (chunkTitles.length === chunkTarget) break;
+        }
+      } catch (err: any) {
+        console.warn(`[${blockName}] chunk attempt ${attempts + 1} falló:`, err?.message);
+      }
+
+      attempts++;
+    }
+
+    if (chunkTitles.length === 0) {
+      console.warn(`[${blockName}] chunk vacío tras ${MAX_RETRIES_PER_CHUNK} intentos, continuo.`);
+    }
+
+    return chunkTitles;
+  };
+
   const generateForBlock = async (
     blockName: string,
     n: number,
     prompt: string,
+    selectedClusterIds: string[],
     selectedClusterNames: string[],
     seedPack: string[],
     avoidList: string[],
@@ -152,53 +213,22 @@ export default function TitlesPage() {
         .filter(Boolean)
     );
 
+    const workingAvoidList = [...avoidList];
+
     for (const chunkTarget of chunks) {
-      const chunkTitles: string[] = [];
-      let attempts = 0;
-
-      while (chunkTitles.length < chunkTarget && attempts < MAX_RETRIES_PER_CHUNK) {
-        const missing = chunkTarget - chunkTitles.length;
-        try {
-          const result = await callAI("TITLES", prompt, {
-            ...projectCtx,
-            count: missing,
-            block_name: blockName,
-            include_cluster_ids: selectedClusters,
-            cluster_names: selectedClusterNames,
-            seed_pack: seedPack,
-            constraints: {
-              exclude_topics: (projectCtx.exclude_topics || "")
-                .split(/[,\n;]+/).map((s: string) => s.trim()).filter(Boolean),
-              year_hint: 2026,
-            },
-            retry_hint:
-              attempts === 0
-                ? `Devuelve exactamente ${missing} títulos válidos.`
-                : `Faltan ${missing} títulos. Devuelve exactamente ${missing} títulos NUEVOS y distintos.`,
-            avoid_list: [...avoidList, ...allTitles, ...chunkTitles].slice(-AVOID_LIST_WINDOW),
-          });
-
-          const generatedTitles = Array.isArray(result?.titles) ? result.titles : [];
-          for (const rawTitle of generatedTitles) {
-            const normalizedTitle = normalizeTitle(rawTitle);
-            const normalizedKey = normalizedTitle.toLowerCase();
-            if (!normalizedTitle || seen.has(normalizedKey)) continue;
-            seen.add(normalizedKey);
-            chunkTitles.push(normalizedTitle);
-            if (chunkTitles.length === chunkTarget) break;
-          }
-        } catch (err: any) {
-          console.warn(`[${blockName}] chunk attempt ${attempts + 1} falló:`, err?.message);
-        }
-
-        attempts++;
-      }
-
-      // Guardar lo que se haya conseguido aunque sea parcial — no abortar el bloque.
-      if (chunkTitles.length === 0) {
-        console.warn(`[${blockName}] chunk vacío tras ${MAX_RETRIES_PER_CHUNK} intentos, continuo.`);
-      }
+      const chunkTitles = await generateTitleChunk(
+        blockName,
+        chunkTarget,
+        prompt,
+        selectedClusterIds,
+        selectedClusterNames,
+        seedPack,
+        workingAvoidList,
+        projectCtx,
+        seen
+      );
       allTitles.push(...chunkTitles);
+      workingAvoidList.push(...chunkTitles);
     }
 
     return allTitles;
@@ -229,7 +259,7 @@ export default function TitlesPage() {
         : [];
 
       if (genMode === "SINGLE") {
-        const titles = await generateForBlock(block, n, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
+        const titles = await generateForBlock(block, n, prompt, selectedClusters, selectedClusterNames, seedPack, avoidList, projectCtx);
         const run = await createTitleRun(currentProjectId, block, n, selectedClusters);
         await saveTitles(run.id, titles);
         toast.success(`${n} títulos generados (${block})`);
@@ -237,30 +267,73 @@ export default function TitlesPage() {
         const dist = distributeCounts(n, mixPcts);
         let totalGenerated = 0;
         const failedBlocks: string[] = [];
+        const globalSeen = new Set(
+          avoidList
+            .map((title) => normalizeTitle(title).toLowerCase())
+            .filter(Boolean)
+        );
+        const globalAvoidList = [...avoidList];
+        const jobs = await Promise.all(
+          MIX_BLOCKS
+            .map((bk) => ({ blockName: bk, target: dist[bk] }))
+            .filter((job) => job.target > 0)
+            .map(async (job) => {
+              const run = await createTitleRun(currentProjectId, job.blockName, job.target, selectedClusters);
+              return { ...job, runId: run.id, generated: 0, emptyChunks: 0, done: false };
+            })
+        );
 
-        for (const bk of MIX_BLOCKS) {
-          const bkCount = dist[bk];
-          if (bkCount <= 0) continue;
-          toast.info(`Generando ${bkCount} títulos para ${bk}...`);
-          try {
-            const titles = await generateForBlock(bk, bkCount, prompt, selectedClusterNames, seedPack, avoidList, projectCtx);
-            if (titles.length > 0) {
-              const run = await createTitleRun(currentProjectId, bk, titles.length, selectedClusters);
-              await saveTitles(run.id, titles);
-              totalGenerated += titles.length;
-              titles.forEach((t: string) => avoidList.push(t));
-              if (titles.length < bkCount) {
-                toast.warning(`${bk}: ${titles.length}/${bkCount} títulos (parcial)`);
+        while (jobs.some((job) => !job.done)) {
+          for (const job of jobs) {
+            if (job.done) continue;
+            const remaining = job.target - job.generated;
+            const chunkTarget = Math.min(remaining, CHUNK_SIZE);
+            toast.info(`Generando ${job.blockName}: ${job.generated}/${job.target}...`);
+
+            try {
+              const titles = await generateTitleChunk(
+                job.blockName,
+                chunkTarget,
+                prompt,
+                selectedClusters,
+                selectedClusterNames,
+                seedPack,
+                globalAvoidList,
+                projectCtx,
+                globalSeen
+              );
+
+              if (titles.length > 0) {
+                await saveTitles(job.runId, titles);
+                job.generated += titles.length;
+                totalGenerated += titles.length;
+                job.emptyChunks = 0;
+                globalAvoidList.push(...titles);
+              } else {
+                job.emptyChunks++;
               }
-            } else {
-              failedBlocks.push(bk);
+
+              if (job.generated >= job.target) job.done = true;
+              if (job.emptyChunks >= MAX_EMPTY_CHUNKS_PER_BLOCK) {
+                job.done = true;
+                failedBlocks.push(job.blockName);
+                toast.warning(`${job.blockName}: detenido tras varios chunks vacíos (${job.generated}/${job.target})`);
+              }
+            } catch (err: any) {
+              console.error(`[${job.blockName}] error completo:`, err);
+              job.emptyChunks++;
+              if (job.emptyChunks >= MAX_EMPTY_CHUNKS_PER_BLOCK) {
+                job.done = true;
+                failedBlocks.push(job.blockName);
+                toast.error(`${job.blockName} falló: ${err?.message || "error desconocido"}. Continuando...`);
+              }
             }
-          } catch (err: any) {
-            console.error(`[${bk}] error completo:`, err);
-            toast.error(`${bk} falló: ${err?.message || "error desconocido"}. Continuando...`);
-            failedBlocks.push(bk);
           }
         }
+
+        jobs.forEach((job) => {
+          if (job.generated < job.target && !failedBlocks.includes(job.blockName)) failedBlocks.push(job.blockName);
+        });
 
         if (failedBlocks.length === 0) {
           toast.success(`Mix completo: ${totalGenerated} títulos generados en 4 bloques`);
