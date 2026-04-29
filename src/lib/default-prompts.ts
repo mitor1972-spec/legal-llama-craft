@@ -59,6 +59,16 @@ Incluye SIEMPRE estos 11 clusters dentro de los 16:
 
 Los 5 restantes: elige los 5 más relevantes según el tema entre MONEY, responsables, vías/estrategia, organismo, peritos, casos tipo, perfiles, entorno.
 
+REGLAS DE NOMBRADO DE CLUSTERS — OBLIGATORIO:
+- Los nombres de cluster DEBEN ser LONG-TAIL, descriptivos y específicos del tema legal del proyecto.
+- Mínimo 5 palabras, ideal 6–10 palabras. NO usar nombres genéricos de una o dos palabras.
+- Cada nombre debe incluir el TEMA LEGAL CONCRETO del proyecto (no solo la categoría abstracta).
+- Ejemplo MALO: "Nulidad", "Precio", "Pasos", "Defensa", "Local".
+- Ejemplo BUENO (tema = préstamos usurarios): "Nulidad de préstamo personal por intereses usurarios", "Honorarios y presupuesto para reclamar préstamo usurario", "Pasos para iniciar la reclamación de un préstamo abusivo", "Defensa frente a reclamación de un préstamo personal", "Despacho experto en préstamos usurarios por provincias".
+- El cluster SEO local DEBE tener un nombre tipo "Despacho/abogado especialista en [TEMA] por provincias de España" (long-tail, no "Local").
+- Adapta cada nombre a la submodalidad real, no a la categoría abstracta del listado anterior.
+- Los nombres deben dar contexto suficiente para que otra IA pueda generar títulos sin ambigüedad.
+
 CLUSTER SEO LOCAL — REGLAS OBLIGATORIAS:
 ${PROVINCIAS_ESPANA}
 - Las 15 seeds del cluster SEO local DEBEN cubrir provincias variadas de esta lista. Rota por todas las provincias, NO te limites a las más conocidas (Madrid, Barcelona, Sevilla...).
