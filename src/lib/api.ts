@@ -110,7 +110,7 @@ export async function upsertClusters(projectId: string, clusters: { name: string
     const c = clusters[i];
     const { data: clusterData, error: clusterError } = await supabase
       .from("clusters")
-      .insert({ project_id: projectId, name: c.name, intent: c.intent, order_index: i })
+      .insert({ project_id: projectId, name: c.name, intent: c.intent, order_index: i, approved: true })
       .select()
       .single();
     if (clusterError) throw clusterError;

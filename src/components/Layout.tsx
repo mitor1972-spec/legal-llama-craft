@@ -1,10 +1,8 @@
 import { NavLink } from "react-router-dom";
-import { FolderOpen, LayoutGrid, Type, ShieldCheck, Settings } from "lucide-react";
+import { FolderOpen, ShieldCheck, Settings } from "lucide-react";
 
 const navItems = [
   { to: "/", label: "Proyecto", icon: FolderOpen },
-  { to: "/clusters", label: "Clusters", icon: LayoutGrid },
-  { to: "/titles", label: "Títulos", icon: Type },
   { to: "/qa-export", label: "QA + Export", icon: ShieldCheck },
   { to: "/prompts", label: "Prompts", icon: Settings },
 ];
