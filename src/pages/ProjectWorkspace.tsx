@@ -333,10 +333,22 @@ export default function ProjectWorkspace() {
   const totalN = parseInt(count) || 200;
   const dist = distributeCounts(totalN, mixPcts);
 
+  if (!projectId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <p className="text-muted-foreground">No se encontró el proyecto.</p>
+        <Button variant="outline" onClick={() => navigate("/")}>
+          <ArrowLeft className="w-4 h-4 mr-1" /> Volver a proyectos
+        </Button>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
         <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">Cargando proyecto...</p>
       </div>
     );
   }

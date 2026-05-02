@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import ProjectPage from "@/pages/ProjectPage";
 import ProjectWorkspace from "@/pages/ProjectWorkspace";
+import ClustersPage from "@/pages/ClustersPage";
+import TitlesPage from "@/pages/TitlesPage";
 import QAExportPage from "@/pages/QAExportPage";
 import PromptsPage from "@/pages/PromptsPage";
 import NotFound from "./pages/NotFound";
@@ -22,6 +24,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<ProjectPage />} />
             <Route path="/workspace/:projectId" element={<ProjectWorkspace />} />
+            <Route path="/clusters" element={<ClustersPage />} />
+            <Route path="/titles" element={<TitlesPage />} />
             <Route path="/qa-export" element={<QAExportPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
             <Route path="*" element={<NotFound />} />
