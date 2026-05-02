@@ -58,6 +58,7 @@ export default function ProjectWorkspace() {
   const { setCurrentProject } = useAppStore();
 
   const [project, setProject] = useState<any>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [clusters, setClusters] = useState<any[]>([]);
   const [seedsMap, setSeedsMap] = useState<Record<string, any[]>>({});
   const [expandedCluster, setExpandedCluster] = useState<string | null>(null);
@@ -87,6 +88,7 @@ export default function ProjectWorkspace() {
   const loadAll = async () => {
     if (!projectId) return;
     try {
+      setLoadError(null);
       const [p, cls, runs] = await Promise.all([
         getProjectById(projectId),
         getClusters(projectId),
@@ -96,9 +98,9 @@ export default function ProjectWorkspace() {
       setClusters(cls || []);
       setBatches(runs || []);
       setCurrentProject(p.id, p.topic);
-      // pre-select all clusters
       setSelectedClusters((prev) => prev.length === 0 ? (cls || []).map((c: any) => c.id) : prev);
     } catch (e: any) {
+      setLoadError(e.message || "Error cargando proyecto");
       toast.error(e.message);
     }
   };
@@ -346,9 +348,20 @@ export default function ProjectWorkspace() {
 
   if (!project) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-        <p className="text-xs text-muted-foreground">Cargando proyecto...</p>
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        {loadError ? (
+          <>
+            <p className="text-destructive">{loadError}</p>
+            <Button variant="outline" onClick={() => navigate("/")}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Volver a proyectos
+            </Button>
+          </>
+        ) : (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Cargando proyecto...</p>
+          </>
+        )}
       </div>
     );
   }
