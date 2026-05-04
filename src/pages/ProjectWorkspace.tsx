@@ -16,10 +16,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider";
 import {
   Loader2, RefreshCw, ChevronDown, ChevronUp, Sparkles, ArrowLeft,
-  Trash2, Zap, Search,
+  Trash2, Zap, Search, Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import TitleBatchCard from "@/components/TitleBatchCard";
+import { exportWPAuto, exportNichoAI } from "@/lib/api";
 
 const BLOCKS = [
   { value: "B1", label: "B1 Comercial" },
@@ -537,6 +538,40 @@ export default function ProjectWorkspace() {
       {/* Filters + Batches */}
       {batches.length > 0 && (
         <Card>
+          {/* Export ALL */}
+          <CardContent className="py-3 border-b border-border">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Download className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Exportar todos ({totalTitles} títulos)</span>
+              <div className="flex-1" />
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => {
+                  const all = batches.flatMap((b: any) => (b.titles || []).map((t: any) => t.text));
+                  if (!all.length) return toast.error("No hay títulos para exportar");
+                  navigator.clipboard.writeText(exportWPAuto(all));
+                  toast.success(`${all.length} títulos copiados (WP Auto)`);
+                }}
+              >
+                <Download className="w-3 h-3 mr-1" /> WP Auto (todos)
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => {
+                  const all = batches.flatMap((b: any) => (b.titles || []).map((t: any) => t.text));
+                  if (!all.length) return toast.error("No hay títulos para exportar");
+                  navigator.clipboard.writeText(exportNichoAI(all));
+                  toast.success(`${all.length} títulos copiados (Nicho.ai)`);
+                }}
+              >
+                <Download className="w-3 h-3 mr-1" /> Nicho.ai (todos)
+              </Button>
+            </div>
+          </CardContent>
           <CardContent className="py-3">
             <div className="flex items-center gap-2 mb-2">
               <Search className="w-4 h-4 text-muted-foreground" />
